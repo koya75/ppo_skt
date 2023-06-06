@@ -1,0 +1,20 @@
+--- recurrent.py	2022-09-12 00:18:24.995952774 +0900
++++ recurrent_patch.py	2022-09-12 00:27:50.777520843 +0900
+@@ -140,7 +140,7 @@
+         return pack
+ 
+ 
+-def one_step_forward(rnn, batch_input, recurrent_state):
++def one_step_forward(rnn, batch_input, recurrent_state, item):
+     """One-step batch forward computation of a recurrent module.
+ 
+     Args:
+@@ -153,7 +153,7 @@
+         object: New batched recurrent state.
+     """
+     pack = pack_one_step_batch_as_sequences(batch_input)
+-    y, recurrent_state = rnn(pack, recurrent_state)
++    y, recurrent_state = rnn(pack, recurrent_state, item)
+     return unpack_sequences_as_one_step_batch(y), recurrent_state
+ 
+ 

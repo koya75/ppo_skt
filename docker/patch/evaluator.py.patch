@@ -1,0 +1,84 @@
+--- evaluator.py	2022-09-12 00:18:43.040378668 +0900
++++ evaluator_patch.py	2022-10-13 18:06:25.991704251 +0900
+@@ -8,6 +8,8 @@
+ 
+ import pfrl
+ 
++import matplotlib.pyplot as plt
++
+ 
+ def _run_episodes(
+     env,
+@@ -29,12 +31,12 @@
+     reset = True
+     while not terminate:
+         if reset:
+-            obs = env.reset()
++            obs, item = env.reset()
+             done = False
+             test_r = 0
+             episode_len = 0
+             info = {}
+-        a = agent.act(obs)
++        a = agent.act(obs, item)
+         obs, r, done, info = env.step(a)
+         test_r += r
+         episode_len += 1
+@@ -120,14 +122,14 @@
+     episode_r = np.zeros(num_envs, dtype=np.float64)
+     episode_len = np.zeros(num_envs, dtype="i")
+ 
+-    obss = env.reset()
++    obss, item = env.reset()
+     rs = np.zeros(num_envs, dtype="f")
+ 
+     termination_conditions = False
+     timestep = 0
+     while True:
+         # a_t
+-        actions = agent.batch_act(obss)
++        actions = agent.batch_act(obss, item)
+         timestep += 1
+         # o_{t+1}, r_{t+1}
+         obss, rs, dones, infos = env.step(actions)
+@@ -204,7 +206,7 @@
+         if termination_conditions:
+             break
+         else:
+-            obss = env.reset(not_end)
++            obss, item = env.reset(not_end)
+ 
+     for i, (epi_len, epi_ret) in enumerate(
+         zip(eval_episode_lens, eval_episode_returns)
+@@ -516,6 +518,26 @@
+     def evaluate_if_necessary(self, t, episodes):
+         if t >= self.prev_eval_t + self.eval_interval:
+             score = self.evaluate_and_update_max_score(t, episodes)
++            scores = np.loadtxt(self.outdir+"/scores.txt", skiprows=1, unpack=True)
++            data01_axis1 = scores[0]
++            data01_value1 = scores[3]
++            data01_vloss = scores[10]
++            data01_ploss = scores[11]
++            fig_1 = plt.figure(figsize=(12, 6))
++            ax_1 = fig_1.add_subplot(111)
++            ax_1.plot(data01_axis1, data01_value1,  color="r", label="score")
++            ax_1.set_xlabel("step")
++            ax_1.set_ylabel("reward")
++            ax_1.legend(loc="upper left")
++            plt.savefig(self.outdir+"/reward_graph.png", dpi=300)
++            fig_2 = plt.figure(figsize=(12, 6))
++            ax_2 = fig_2.add_subplot(111)
++            ax_2.plot(data01_axis1, data01_vloss,  color="c", label="value_loss")
++            ax_2.plot(data01_axis1, data01_ploss,  color="m", label="policy_loss")
++            ax_2.set_xlabel("step")
++            ax_2.set_ylabel("loss")
++            ax_2.legend(loc="upper left")
++            plt.savefig(self.outdir+"/log_graph.png", dpi=300)
+             self.prev_eval_t = t - t % self.eval_interval
+             return score
+         return None
+@@ -672,3 +694,4 @@
+ 
+     def join_tensorboard_writer(self):
+         self.record_tb_stats_thread.join()
++

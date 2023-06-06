@@ -1,0 +1,29 @@
+--- train_agent_batch.py	2022-09-12 00:18:56.432695159 +0900
++++ train_agent_batch_patch.py	2022-09-12 00:26:39.731799275 +0900
+@@ -54,7 +54,7 @@
+     episode_len = np.zeros(num_envs, dtype="i")
+ 
+     # o_0, r_0
+-    obss = env.reset()
++    obss, item = env.reset()
+ 
+     t = step_offset
+     if hasattr(agent, "t"):
+@@ -64,7 +64,7 @@
+     try:
+         while True:
+             # a_t
+-            actions = agent.batch_act(obss)
++            actions = agent.batch_act(obss, item)
+             # o_{t+1}, r_{t+1}
+             obss, rs, dones, infos = env.step(actions)
+             episode_r += rs
+@@ -138,7 +138,7 @@
+             # Start new episodes if needed
+             episode_r[end] = 0
+             episode_len[end] = 0
+-            obss = env.reset(not_end)
++            obss, item = env.reset(not_end)
+ 
+     except (Exception, KeyboardInterrupt):
+         # Save the current model before being killed

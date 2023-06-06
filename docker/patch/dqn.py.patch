@@ -1,0 +1,74 @@
+--- dqn.py	2023-02-13 18:25:11.731325651 +0900
++++ dqn_patch.py	2023-02-14 15:45:23.970549338 +0900
+@@ -33,6 +33,8 @@
+     recurrent_state_as_numpy,
+ )
+ 
++import pickle
++
+ 
+ def _mean_or_nan(xs: Sequence[float]) -> float:
+     """Return its mean a non-empty sequence, numpy.nan for a empty one."""
+@@ -294,7 +296,7 @@
+         self.update_counter = update_counter
+ 
+         # Make a copy on shared memory and share among actors and the poller
+-        shared_model = copy.deepcopy(self.model)#.cpu()
++        shared_model = copy.deepcopy(self.model).cpu()
+         shared_model.share_memory()
+ 
+         # Pipes are used for infrequent communication
+@@ -471,6 +473,18 @@
+         self, batch_obs: Sequence[Any]
+     ) -> ActionValue:
+         batch_xs = self.batch_states(batch_obs, self.device, self.phi)
++        """conv_features, enc_attn_weights, dec_attn_weights = [], [], []
++        hooks = [
++            self.model.conv[-1].register_forward_hook(
++                lambda self, input, output: conv_features.append(output)
++            ),
++            self.model.transformer_encoder.layers[-1].self_attn.register_forward_hook(
++                lambda self, input, output: enc_attn_weights.append(output[1])
++            ),
++            self.model.transformer_decoder.layers[-1].multihead_attn.register_forward_hook(
++                lambda self, input, output: dec_attn_weights.append(output[1])
++            ),
++        ]"""
+         if self.recurrent:
+             if self.training:
+                 self.train_prev_recurrent_states = self.train_recurrent_states
+@@ -483,17 +497,23 @@
+                 )
+         else:
+             batch_av = self.model(batch_xs)
++            """for hook in hooks:
++                hook.remove()
++            self.conv_features = conv_features[0]
++            self.enc_attn_weights = enc_attn_weights[0]
++            self.dec_attn_weights = dec_attn_weights[0]"""
+         return batch_av
+ 
+     def batch_act(self, batch_obs: Sequence[Any]) -> Sequence[Any]:
+         with torch.no_grad(), evaluating(self.model):
+             batch_av = self._evaluate_model_and_update_recurrent_states(batch_obs)
+-            batch_argmax = batch_av.greedy_actions.detach().cpu().numpy()
++            #self.batch_value = batch_av.q_values.detach().cpu().numpy()
++            self.batch_argmax = batch_av.greedy_actions.detach().cpu().numpy()
+         if self.training:
+             batch_action = [
+                 self.explorer.select_action(
+                     self.t,
+-                    lambda: batch_argmax[i],
++                    lambda: self.batch_argmax[i],
+                     action_value=batch_av[i : i + 1],
+                 )
+                 for i in range(len(batch_obs))
+@@ -501,7 +521,7 @@
+             self.batch_last_obs = list(batch_obs)
+             self.batch_last_action = list(batch_action)
+         else:
+-            batch_action = batch_argmax
++            batch_action = self.batch_argmax
+         return batch_action
+ 
+     def _batch_observe_train(

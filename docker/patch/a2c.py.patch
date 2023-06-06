@@ -1,0 +1,13 @@
+--- a2c.py	2022-10-06 11:41:04.916459599 +0900
++++ a2c_patch.py	2022-10-06 11:40:41.867936299 +0900
+@@ -213,7 +213,9 @@
+             float(dist_entropy) - self.average_entropy
+         )
+ 
+-    def batch_act(self, batch_obs):
++    def batch_act(self, batch_obs, item, demo=False):
++        self.item=item
++        self.demo = demo
+         if self.training:
+             return self._batch_act_train(batch_obs)
+         else:

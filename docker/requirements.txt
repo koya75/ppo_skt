@@ -1,0 +1,14 @@
+matplotlib
+tensorboardX
+pybullet
+janome
+fugashi
+gym
+optuna
+plotly
+pandas
+transformers
+ipadic
+einops
+torchtext
+tqdm
