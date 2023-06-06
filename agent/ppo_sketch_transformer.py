@@ -2,6 +2,13 @@ import torch
 import torch.nn as nn
 from torch.distributions import MultivariateNormal
 from torch.distributions import Categorical
+import numpy as np
+from einops import rearrange
+from einops.layers.torch import Rearrange
+from agent.module.transformer import Transformer, TransformerEncoder, TransformerDecoder, TransformerEncoderLayer, TransformerDecoderLayer
+
+def pair(t):
+    return t if isinstance(t, tuple) else (t, t)
 
 class ActorCritic(nn.Module):
     def __init__(self, args, state_dim, action_dim, has_continuous_action_space, action_std_init):
@@ -12,6 +19,11 @@ class ActorCritic(nn.Module):
 
         self.has_continuous_action_space = has_continuous_action_space
         self.device = args.device
+        image_size = 128
+        patch_size = 8
+        channels = 3
+        num_encoder_layers = 1
+        num_decoder_layers = 1
         
         if has_continuous_action_space:
             self.action_dim = action_dim
@@ -20,22 +32,36 @@ class ActorCritic(nn.Module):
         hidden_dim = 256
         if has_continuous_action_space :
 
-            self.actor_conv = nn.Sequential(
-                            nn.Conv2d(3, 32, kernel_size=8, stride=4),
-                            nn.ReLU(),
-                            nn.Conv2d(32, 64, kernel_size=4, stride=2),
-                            nn.ReLU(),
-                            nn.Conv2d(64, hidden_dim, kernel_size=3, stride=1),
-                            nn.ReLU()
-                        )
-            self.actor = nn.Sequential(
-                            nn.Linear(hidden_dim*12*12, 64),
-                            nn.Tanh(),
-                            nn.Linear(64, 64),
-                            nn.Tanh(),
-                            nn.Linear(64, action_dim),
-                            nn.Tanh()
-                        )
+            image_height, image_width = pair(image_size)#copy the number
+            patch_height, patch_width = pair(patch_size)#copy the number
+            assert image_height % patch_height == 0 and image_width % patch_width == 0, 'Image dimensions must be divisible by the patch size.' 
+
+            num_patches = (image_height // patch_height) * (image_width // patch_width)#how many patches
+            patch_dim = channels * patch_height * patch_width#patch image to vector
+
+            self.to_patch_embedding = nn.Sequential(
+                Rearrange('b c (h p1) (w p2) -> b (h w) (p1 p2 c)', p1 = patch_height, p2 = patch_width), #(h,w) patch number
+                nn.Linear(patch_dim, hidden_dim),
+                Rearrange('b n d -> n b d')
+            )
+
+            self.pos_embedding = nn.Parameter(torch.randn(num_patches, 1, hidden_dim))
+
+            encoder_layer = TransformerEncoderLayer(hidden_dim, nhead=4, dim_feedforward=64,
+                                                    dropout=0.1, activation="relu", normalize_before=False)
+            self.transformer_encoder = TransformerEncoder(encoder_layer, num_encoder_layers)
+
+            decoder_layer = TransformerDecoderLayer(hidden_dim, nhead=4, dim_feedforward=64,
+                                                    dropout=0.1, activation="relu", normalize_before=False)
+            decoder_norm = nn.LayerNorm(hidden_dim)
+            self.transformer_decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm)
+
+            g_point = torch.from_numpy(np.loadtxt('image/green6.csv', delimiter=",")).clone().to(self.device).to(torch.float32)
+            self.g_point = g_point.reshape([10, 4, 2],-1).flatten(1,2)
+            self.sketch_encoder = nn.Linear(self.g_point.shape[1], hidden_dim)
+            self.sketch_pos_embedding = nn.Parameter(torch.randn(self.g_point.shape[0],  1, hidden_dim))
+
+            self.actor = nn.Sequential(nn.Linear(self.g_point.shape[0]*hidden_dim, action_dim),nn.Tanh())
         else:
             self.actor = nn.Sequential(
                             nn.Linear(state_dim, 64),
@@ -76,8 +102,22 @@ class ActorCritic(nn.Module):
     def act(self, state):
 
         if self.has_continuous_action_space:
-            action_hidden = self.actor_conv(state)
-            action_mean = self.actor(action_hidden.flatten(1))
+            # construct positional encodings
+            self.input_image = state * 1.0
+
+            src = self.to_patch_embedding(state)
+
+            n, bs, p = src.shape
+            src += self.pos_embedding
+
+            memory = self.transformer_encoder(src)
+            # sketch_transformer encoder
+            sketch_query = self.sketch_encoder(self.g_point).unsqueeze(1).repeat(1, bs, 1)
+            sketch_query += self.sketch_pos_embedding
+
+            actor_out = self.transformer_decoder(sketch_query, memory)[0] # 3,bs,256
+            action_mean = self.actor(actor_out.permute(1, 0, 2).flatten(1,2))
+
             cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
             dist = MultivariateNormal(action_mean, cov_mat)
         else:
@@ -94,8 +134,21 @@ class ActorCritic(nn.Module):
     def evaluate(self, state, action):
 
         if self.has_continuous_action_space:
-            action_hidden = self.actor_conv(state)
-            action_mean = self.actor(action_hidden.flatten(1))
+            # construct positional encodings
+            self.input_image = state * 1.0
+
+            src = self.to_patch_embedding(state)
+
+            n, bs, p = src.shape
+            src += self.pos_embedding
+
+            memory = self.transformer_encoder(src)
+            # sketch_transformer encoder
+            sketch_query = self.sketch_encoder(self.g_point).unsqueeze(1).repeat(1, bs, 1)
+            sketch_query += self.sketch_pos_embedding
+
+            actor_out = self.transformer_decoder(sketch_query, memory)[0] # 3,bs,256
+            action_mean = self.actor(actor_out.permute(1, 0, 2).flatten(1,2))
             
             action_var = self.action_var.expand_as(action_mean)
             cov_mat = torch.diag_embed(action_var).to(self.device)

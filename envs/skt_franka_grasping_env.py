@@ -16,7 +16,7 @@ from gym import spaces
 from .franka_grasping_module.table import Table
 from .franka_grasping_module.franka_slide import Franka
 #from .franka_grasping_module.item_slide import Item
-from .franka_grasping_module.camera_slide import Camera
+from .franka_grasping_module.camera_map import Camera
 
 from repos.pfrl.pfrl.env import VectorEnv
 
@@ -315,7 +315,7 @@ class FrankaGraspingEnv(VectorEnv):
             self.table.add(env_ptr, i)
             #self.tray.add(env_ptr, i)
             #self.item.add(env_ptr, i)
-            self.cam_tensors.append(self.camera.add(env_ptr, self.franka.hand_handle))
+            self.cam_tensors.append(self.camera.add(env_ptr))#, self.franka.hand_handle
             self.gym.end_aggregate(env_ptr)
 
         self._init_data()
