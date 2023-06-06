@@ -203,7 +203,7 @@ def train():
     if item_names is None:
         item_names = sorted(list(Path(item_asset_root).glob("*.urdf")))
         item_names = [path.stem for path in item_names]
-    output_debug_images_dir = args.output_sensor_images_dir
+    output_debug_images_dir = args.output_sensor_images_dir#directory
     from envs.skt_franka_grasping_env import FrankaGraspingEnv
 
     def make_batch_env(num_envs):

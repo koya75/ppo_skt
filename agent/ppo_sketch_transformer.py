@@ -24,6 +24,7 @@ class ActorCritic(nn.Module):
         channels = 3
         num_encoder_layers = 1
         num_decoder_layers = 1
+        self.t = 0
         
         if has_continuous_action_space:
             self.action_dim = action_dim
@@ -49,7 +50,7 @@ class ActorCritic(nn.Module):
 
             encoder_layer = TransformerEncoderLayer(hidden_dim, nhead=4, dim_feedforward=64,
                                                     dropout=0.1, activation="relu", normalize_before=False)
-            self.transformer_encoder = TransformerEncoder(encoder_layer, num_encoder_layers)
+            self.image_transformer_encoder = TransformerEncoder(encoder_layer, num_encoder_layers)
 
             decoder_layer = TransformerDecoderLayer(hidden_dim, nhead=4, dim_feedforward=64,
                                                     dropout=0.1, activation="relu", normalize_before=False)
@@ -60,8 +61,9 @@ class ActorCritic(nn.Module):
             self.g_point = g_point.reshape([10, 4, 2],-1).flatten(1,2)
             self.sketch_encoder = nn.Linear(self.g_point.shape[1], hidden_dim)
             self.sketch_pos_embedding = nn.Parameter(torch.randn(self.g_point.shape[0],  1, hidden_dim))
+            self.sketch_transformer_encoder = TransformerEncoder(encoder_layer, num_encoder_layers)
 
-            self.actor = nn.Sequential(nn.Linear(self.g_point.shape[0]*hidden_dim, action_dim),nn.Tanh())
+            self.actor = nn.Sequential(nn.Linear(hidden_dim, action_dim),nn.Tanh())
         else:
             self.actor = nn.Sequential(
                             nn.Linear(state_dim, 64),
@@ -110,12 +112,16 @@ class ActorCritic(nn.Module):
             n, bs, p = src.shape
             src += self.pos_embedding
 
-            memory = self.transformer_encoder(src)
-            # sketch_transformer encoder
-            sketch_query = self.sketch_encoder(self.g_point).unsqueeze(1).repeat(1, bs, 1)
-            sketch_query += self.sketch_pos_embedding
+            if self.t % 10 == 0:
+                # sketch_transformer encoder
+                sketch_query = self.sketch_encoder(self.g_point).unsqueeze(1).repeat(1, bs, 1)
+                sketch_query += self.sketch_pos_embedding
+                self.sketch_query = self.sketch_transformer_encoder(sketch_query)
+                self.t=0
 
-            actor_out = self.transformer_decoder(sketch_query, memory)[0] # 3,bs,256
+            memory = self.image_transformer_encoder(src)
+
+            actor_out = self.transformer_decoder(self.sketch_query[self.t].unsqueeze(0), memory)[0] # 3,bs,256
             action_mean = self.actor(actor_out.permute(1, 0, 2).flatten(1,2))
 
             cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
@@ -128,6 +134,7 @@ class ActorCritic(nn.Module):
         action_logprob = dist.log_prob(action)
         state_hidden = self.critic_conv(state)
         state_val = self.critic(state_hidden.flatten(1))
+        self.t += 1
 
         return action.detach(), action_logprob.detach(), state_val.detach()
     
@@ -142,12 +149,16 @@ class ActorCritic(nn.Module):
             n, bs, p = src.shape
             src += self.pos_embedding
 
-            memory = self.transformer_encoder(src)
-            # sketch_transformer encoder
-            sketch_query = self.sketch_encoder(self.g_point).unsqueeze(1).repeat(1, bs, 1)
-            sketch_query += self.sketch_pos_embedding
+            if self.t % 20 == 0:
+                # sketch_transformer encoder
+                sketch_query = self.sketch_encoder(self.g_point).unsqueeze(1).repeat(1, bs, 1)
+                sketch_query += self.sketch_pos_embedding
+                self.sketch_query = self.sketch_transformer_encoder(sketch_query)
+                self.t=0
 
-            actor_out = self.transformer_decoder(sketch_query, memory)[0] # 3,bs,256
+            memory = self.image_transformer_encoder(src)
+
+            actor_out = self.transformer_decoder(self.sketch_query[self.t].unsqueeze(0), memory)[0] # 3,bs,256
             action_mean = self.actor(actor_out.permute(1, 0, 2).flatten(1,2))
             
             action_var = self.action_var.expand_as(action_mean)
