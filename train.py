@@ -149,7 +149,7 @@ def train():
 
     print_freq = max_ep_len * 10        # print avg reward in the interval (in num timesteps)
     log_freq = max_ep_len * 2           # log avg reward in the interval (in num timesteps)
-    save_model_freq = int(1e5)          # save model frequency (in num timesteps)
+    save_model_freq = int(1e4)          # save model frequency (in num timesteps)
 
     action_std = 0.6                    # starting std for action distribution (Multivariate Normal)
     action_std_decay_rate = 0.05        # linearly decay action_std (action_std = action_std - action_std_decay_rate)
@@ -324,6 +324,8 @@ def train():
     log_running_reward = 0
     log_running_episodes = 0
 
+    best_reward = -9999
+
     time_step = 0
     i_episode = 0
 
@@ -384,18 +386,31 @@ def train():
                 print_running_reward = 0
                 print_running_episodes = 0
 
-            # save model weights
-            if time_step % save_model_freq == 0 and args.is_master:
+            # break; if the episode is over
+            if done.all():
+                break
+
+        # save model weights
+        if args.is_master:
+            if current_ep_reward > best_reward:
+                best_reward = current_ep_reward
+                best_reward = best_reward.round(decimals=2)
+                checkpoint_path = directory + "PPO_best.pth"
+                print("--------------------------------------------------------------------------------------------")
+                print("saving model at : " + checkpoint_path)
+                ppo_agent.save(checkpoint_path)
+                print("best_model saved || score:{:.2f}".format(best_reward))
+                print("Elapsed Time  : ", datetime.now(pytz.timezone('Asia/Tokyo')).replace(microsecond=0) - start_time)
+                print("--------------------------------------------------------------------------------------------")
+
+            if i_episode % save_model_freq == 0 and i_episode > 0:
+                checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, time_step)
                 print("--------------------------------------------------------------------------------------------")
                 print("saving model at : " + checkpoint_path)
                 ppo_agent.save(checkpoint_path)
                 print("model saved")
                 print("Elapsed Time  : ", datetime.now(pytz.timezone('Asia/Tokyo')).replace(microsecond=0) - start_time)
                 print("--------------------------------------------------------------------------------------------")
-
-            # break; if the episode is over
-            if done.all():
-                break
 
         print_running_reward += current_ep_reward
         print_running_episodes += 1

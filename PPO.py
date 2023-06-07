@@ -34,7 +34,6 @@ class PPO:
             self.device = torch.device('cuda:{}'.format(args.local_rank))
             torch.cuda.empty_cache()
             print("Device set to : " + str(torch.cuda.get_device_name(self.device)))
-            time.sleep(1)
         else:
             print("Device set to : cpu")
         args.device = self.device
