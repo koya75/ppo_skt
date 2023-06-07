@@ -139,7 +139,7 @@ class ActorCritic(nn.Module):
 
         return action.detach(), action_logprob.detach(), state_val.detach(), sketch_query.detach()
     
-    def evaluate(self, state, action, rand):
+    def evaluate(self, state, action, sketch_query):
 
         if self.has_continuous_action_space:
             # construct positional encodings
@@ -149,8 +149,6 @@ class ActorCritic(nn.Module):
 
             n, bs, p = src.shape
             src += self.pos_embedding
-
-            sketch_query = rand
 
             memory = self.image_transformer_encoder(src)
 

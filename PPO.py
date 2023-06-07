@@ -26,22 +26,7 @@ class RolloutBuffer:
 class PPO:
     def __init__(self, args, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6):
 
-        ################################## set device ##################################
-        dist.barrier()
-        if args.is_master:
-            print("============================================================================================")
-        # set device to cpu or cuda
-        self.device = torch.device('cpu')
-        if(torch.cuda.is_available()): 
-            self.device = torch.device('cuda:{}'.format(args.local_rank))
-            torch.cuda.empty_cache()
-            print("Device set to : " + str(torch.cuda.get_device_name(self.device)))
-        else:
-            print("Device set to : cpu")
-        args.device = self.device
-        if args.is_master is False:
-            print("============================================================================================")
-
+        self.device = args.device
         self.has_continuous_action_space = has_continuous_action_space
 
         if has_continuous_action_space:
@@ -57,18 +42,24 @@ class PPO:
             from agent.ppo_vanilla import ActorCritic
         elif args.model == "skt":
             from agent.ppo_sketch_transformer import ActorCritic
-        policy = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
-        ### distributed
-        self.policy = torch.nn.parallel.DistributedDataParallel(
-            policy, device_ids=[args.local_rank], output_device=args.local_rank
-        )
-        self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
+        if args.demo:
+            self.policy = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)           
+            self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
+            self.policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+        else:
+            policy = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            ### distributed
+            self.policy = torch.nn.parallel.DistributedDataParallel(
+                policy, device_ids=[args.local_rank], output_device=args.local_rank
+            )
+            self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
-        policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
-        ### distributed
-        self.policy_old = torch.nn.parallel.DistributedDataParallel(
-            policy_old, device_ids=[args.local_rank], output_device=args.local_rank
-        )
+            policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            ### distributed
+            self.policy_old = torch.nn.parallel.DistributedDataParallel(
+                policy_old, device_ids=[args.local_rank], output_device=args.local_rank
+            )
+
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss().to(self.device)

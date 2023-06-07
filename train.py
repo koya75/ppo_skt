@@ -300,6 +300,23 @@ def train():
         #####################################################
 
         print("============================================================================================")
+    
+
+    ################################## set device ##################################
+    dist.barrier()
+    if args.is_master:
+        print("============================================================================================")
+    # set device to cpu or cuda
+    device = torch.device('cpu')
+    if(torch.cuda.is_available()): 
+        device = torch.device('cuda:{}'.format(args.local_rank))
+        torch.cuda.empty_cache()
+        print("Device set to : " + str(torch.cuda.get_device_name(device)))
+    else:
+        print("Device set to : cpu")
+    args.device = device
+    if args.is_master is False:
+        print("============================================================================================")
 
     ################# training procedure ################
 
@@ -422,7 +439,6 @@ def train():
 
     if args.is_master:
         log_f.close()
-    envs.close()
 
     # print total training time
     if args.is_master:

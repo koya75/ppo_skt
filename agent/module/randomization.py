@@ -20,6 +20,7 @@ class MyRandomization(nn.Module):
 
 
     def forward(self, rand):
+        print(rand)
         if rand==0:
             return self.pattern1
         elif rand==1:
