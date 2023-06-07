@@ -66,6 +66,7 @@ class FrankaGraspingEnv(VectorEnv):
         self.num_items = num_items
         self.item_names = item_names
         self.use_viewer = use_viewer
+        self.random_int = 0
 
         self.device = "cuda" + ":" + str(self.device_id)
         print(self.device)
@@ -367,10 +368,12 @@ class FrankaGraspingEnv(VectorEnv):
     def reset(self, mask=None):
         if mask is not None:
             if np.any(~mask): # can not partial envs reset.
+                self.random_int = torch.randint(4, (1,), device=self.device)
                 self._reset(torch.arange(self.num_envs, device=self.device))
         else:
+            self.random_int = torch.randint(4, (1,), device=self.device)
             self._reset(torch.arange(self.num_envs, device=self.device))
-        return self.obs_buf
+        return self.obs_buf, self.random_int
 
     def _init_data(self):
 
@@ -403,6 +406,7 @@ class FrankaGraspingEnv(VectorEnv):
             self.max_episode_length,
             self.hand_pos,
             self.hand_rot,
+            self.random_int,
         )#self.item_pos,
 
     def _compute_observations(self):
@@ -516,16 +520,27 @@ def compute_franka_reward(
     max_episode_length,
     hand_pos,
     hand_rot,
+    randint,
 ):#item_pos,
-    # type: (Tensor, Tensor, Tensor, Tensor, float, Tensor, Tensor) -> Tuple[Tensor, Tensor]
+    # type: (Tensor, Tensor, Tensor, Tensor, float, Tensor, Tensor, Tensor) -> Tuple[Tensor, Tensor]
     flag = "hight" # hight , right , left , pickandplease
 
     # regularization on the actions (summed for each environment)
 
     gorl = torch.zeros_like(hand_pos)
-    gorl[:, 0] = 0.3
-    gorl[:, 1] = 0.6
     gorl[:, 2] = 5.3
+    if randint==0:
+        gorl[:, 0] = -0.3
+        gorl[:, 1] = 0.6
+    elif randint==1:
+        gorl[:, 0] = 0.3
+        gorl[:, 1] = 0.6
+    elif randint==0:
+        gorl[:, 0] = -0.2
+        gorl[:, 1] = 0.6
+    elif randint==1:
+        gorl[:, 0] = 0.2
+        gorl[:, 1] = 0.6
     """dpos = (item_pos - global_franka_pos.unsqueeze(1))
     distance = torch.norm(dpos,dim=-1)
     item_x = item_pos[:, 1, 0]

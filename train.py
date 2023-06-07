@@ -169,7 +169,7 @@ def train():
     lr_actor = 0.0003       # learning rate for actor network
     lr_critic = 0.001       # learning rate for critic network
 
-    random_seed = 0         # set random seed if required (0 = no random seed)
+    random_seed = 1         # set random seed if required (0 = no random seed)
     #####################################################
 
     ################### checkpointing ###################
@@ -295,7 +295,7 @@ def train():
             print("--------------------------------------------------------------------------------------------")
             print("setting random seed to ", random_seed)
             torch.manual_seed(random_seed)
-            envs.seed(random_seed)
+            #envs.seed(random_seed)
             np.random.seed(random_seed)
         #####################################################
 
@@ -333,13 +333,13 @@ def train():
     while time_step <= max_training_timesteps:
 
         dist.barrier()
-        state = envs.reset()
+        state, rand = envs.reset()
         current_ep_reward = 0
 
         for t in range(1, max_ep_len+1):
 
             # select action with policy
-            action = ppo_agent.select_action(state)
+            action = ppo_agent.select_action(state, rand)
             state, reward, done, _ = envs.step(action)
 
             # saving reward and is_terminals
@@ -392,7 +392,7 @@ def train():
 
         # save model weights
         if args.is_master:
-            if current_ep_reward > best_reward:
+            if current_ep_reward > best_reward and time_step >= update_timestep*2:
                 best_reward = current_ep_reward
                 best_reward = best_reward.round(decimals=2)
                 checkpoint_path = directory + "PPO_best.pth"

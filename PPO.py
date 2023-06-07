@@ -12,6 +12,7 @@ class RolloutBuffer:
         self.rewards = []
         self.state_values = []
         self.is_terminals = []
+        self.sketch_querys = []
     
     def clear(self):
         del self.actions[:]
@@ -20,6 +21,7 @@ class RolloutBuffer:
         del self.rewards[:]
         del self.state_values[:]
         del self.is_terminals[:]
+        del self.sketch_querys[:]
 
 class PPO:
     def __init__(self, args, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6):
@@ -97,17 +99,18 @@ class PPO:
             print("WARNING : Calling PPO::decay_action_std() on discrete action space policy")
         print("--------------------------------------------------------------------------------------------")
 
-    def select_action(self, state):
+    def select_action(self, state, rand):
 
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
-                action, action_logprob, state_val = self.policy_old.module.act(state)
+                action, action_logprob, state_val, sketch_query = self.policy_old.module.act(state, rand)
 
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
             self.buffer.logprobs.append(action_logprob)
             self.buffer.state_values.append(state_val)
+            self.buffer.sketch_querys.append(sketch_query)
 
             return action.detach().cpu().numpy()#.flatten()
         else:
@@ -141,6 +144,8 @@ class PPO:
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
+        old_sketch_querys = torch.squeeze(torch.stack(self.buffer.sketch_querys, dim=0)).detach().to(self.device)
+
 
         # calculate advantages
         advantages = rewards.detach() - old_state_values.detach()
@@ -149,7 +154,7 @@ class PPO:
         for _ in range(self.K_epochs):
 
             # Evaluating old actions and values
-            logprobs, state_values, dist_entropy = self.policy.module.evaluate(old_states, old_actions)
+            logprobs, state_values, dist_entropy = self.policy.module.evaluate(old_states, old_actions, old_sketch_querys)
 
             # match state_values tensor dimensions with rewards tensor
             state_values = torch.squeeze(state_values)
