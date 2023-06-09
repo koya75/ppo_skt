@@ -11,7 +11,7 @@ import numpy as np
 
 import gym
 
-from PPO import PPO
+from test_PPO import PPO
 import torch.distributed as dist
 from pathlib import Path
 from make_urdf import URDF
@@ -212,7 +212,6 @@ def test():
         return env
 
     envs = make_batch_env(num_envs=args.num_envs)
-    dist.barrier()
 
     # state space dimension
     state_dim = envs.observation_space.shape[0]

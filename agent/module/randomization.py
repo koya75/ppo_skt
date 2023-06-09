@@ -9,6 +9,7 @@ class MyRandomization(nn.Module):
     def __init__(self, device):
         super().__init__()
 
+        self.device=device
         pattern1 = torch.from_numpy(np.loadtxt('image/pattern1.csv', delimiter=",")).clone().to(device).to(torch.float32)
         self.pattern1 = pattern1.reshape([10, 5, 2],-1).flatten(1,2)
         pattern2 = torch.from_numpy(np.loadtxt('image/pattern2.csv', delimiter=",")).clone().to(device).to(torch.float32)
@@ -19,7 +20,7 @@ class MyRandomization(nn.Module):
         self.pattern4 = pattern4.reshape([10, 5, 2],-1).flatten(1,2)
 
 
-    def forward(self, rand):
+    def select(self, rand):
         print(rand)
         if rand==0:
             return self.pattern1
@@ -29,3 +30,17 @@ class MyRandomization(nn.Module):
             return self.pattern3
         elif rand==3:
             return self.pattern4
+        
+    def batch_select(self, rand):
+        pattern = []
+        for i in range(len(rand)):
+            if rand[i]==0:
+                pattern.append(self.pattern1)
+            elif rand[i]==1:
+                pattern.append(self.pattern2)
+            elif rand[i]==2:
+                pattern.append(self.pattern3)
+            elif rand[i]==3:
+                pattern.append(self.pattern4)
+        pattern = torch.stack(pattern, dim=0).detach().to(self.device)
+        return pattern

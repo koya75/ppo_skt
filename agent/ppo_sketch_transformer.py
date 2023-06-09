@@ -5,7 +5,6 @@ from torch.distributions import Categorical
 import numpy as np
 from einops import rearrange
 from einops.layers.torch import Rearrange
-from agent.module.randomization import MyRandomization
 from agent.module.transformer import Transformer, TransformerEncoder, TransformerDecoder, TransformerEncoderLayer, TransformerDecoderLayer
 
 def pair(t):
@@ -58,11 +57,6 @@ class ActorCritic(nn.Module):
             decoder_norm = nn.LayerNorm(hidden_dim)
             self.transformer_decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm)
 
-            self.sketch_token = MyRandomization(self.device)
-            self.sketch_encoder = nn.Linear(10, hidden_dim)
-            self.sketch_pos_embedding = nn.Parameter(torch.randn(10,  1, hidden_dim))
-            self.sketch_transformer_encoder = TransformerEncoder(encoder_layer, num_encoder_layers)
-
             self.actor = nn.Sequential(nn.Linear(hidden_dim, action_dim),nn.Tanh())
         else:
             self.actor = nn.Sequential(
@@ -101,7 +95,7 @@ class ActorCritic(nn.Module):
     def forward(self):
         raise NotImplementedError
     
-    def act(self, state, rand):
+    def act(self, state, skq):
 
         if self.has_continuous_action_space:
             # construct positional encodings
@@ -112,17 +106,10 @@ class ActorCritic(nn.Module):
             n, bs, p = src.shape
             src += self.pos_embedding
 
-            if self.t % 10 == 0:
-                # sketch_transformer encoder
-                sketch_querys = self.sketch_encoder(self.sketch_token(rand)).unsqueeze(1).repeat(1, bs, 1)
-                sketch_querys += self.sketch_pos_embedding
-                self.sketch_querys = self.sketch_transformer_encoder(sketch_querys)
-                self.t=0
-
             memory = self.image_transformer_encoder(src)
 
-            sketch_query = self.sketch_querys[self.t]
-            actor_out = self.transformer_decoder(sketch_query.unsqueeze(0), memory)[0] # 3,bs,256
+            sketch_query = skq.repeat(1, bs, 1)
+            actor_out = self.transformer_decoder(sketch_query, memory)[0] # 3,bs,256
             action_mean = self.actor(actor_out.permute(1, 0, 2).flatten(1,2))
 
             cov_mat = torch.diag(self.action_var).unsqueeze(dim=0)
@@ -137,9 +124,9 @@ class ActorCritic(nn.Module):
         state_val = self.critic(state_hidden.flatten(1))
         self.t += 1
 
-        return action.detach(), action_logprob.detach(), state_val.detach(), sketch_query.detach()
+        return action.detach(), action_logprob.detach(), state_val.detach()
     
-    def evaluate(self, state, action, sketch_query):
+    def evaluate(self, state, action, skq):
 
         if self.has_continuous_action_space:
             # construct positional encodings
@@ -152,7 +139,8 @@ class ActorCritic(nn.Module):
 
             memory = self.image_transformer_encoder(src)
 
-            actor_out = self.transformer_decoder(sketch_query.unsqueeze(0), memory)[0] # 3,bs,256
+            sketch_query = skq.unsqueeze(0)
+            actor_out = self.transformer_decoder(sketch_query, memory)[0] # 3,bs,256
             action_mean = self.actor(actor_out.permute(1, 0, 2).flatten(1,2))
             
             action_var = self.action_var.expand_as(action_mean)

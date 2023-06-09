@@ -300,23 +300,6 @@ def train():
         #####################################################
 
         print("============================================================================================")
-    
-
-    ################################## set device ##################################
-    dist.barrier()
-    if args.is_master:
-        print("============================================================================================")
-    # set device to cpu or cuda
-    device = torch.device('cpu')
-    if(torch.cuda.is_available()): 
-        device = torch.device('cuda:{}'.format(args.local_rank))
-        torch.cuda.empty_cache()
-        print("Device set to : " + str(torch.cuda.get_device_name(device)))
-    else:
-        print("Device set to : cpu")
-    args.device = device
-    if args.is_master is False:
-        print("============================================================================================")
 
     ################# training procedure ################
 
@@ -352,11 +335,13 @@ def train():
         dist.barrier()
         state, rand = envs.reset()
         current_ep_reward = 0
+        sketch_querys = ppo_agent.select_query(rand)
 
         for t in range(1, max_ep_len+1):
 
+            sketch_query = sketch_querys[t-1].unsqueeze(0)
             # select action with policy
-            action = ppo_agent.select_action(state, rand)
+            action = ppo_agent.select_action(state, sketch_query)
             state, reward, done, _ = envs.step(action)
 
             # saving reward and is_terminals
