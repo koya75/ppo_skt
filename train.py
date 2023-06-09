@@ -385,6 +385,16 @@ def train():
                 if args.is_master:
                     print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {:.2f}".format(i_episode, time_step, print_avg_reward/_num_gpus))
 
+                    if print_avg_reward > best_reward:
+                        best_reward = print_avg_reward
+                        checkpoint_path = directory + "PPO_best.pth"
+                        print("--------------------------------------------------------------------------------------------")
+                        print("saving model at : " + checkpoint_path)
+                        ppo_agent.save(checkpoint_path)
+                        print("best_model saved || score:{:.2f}".format(best_reward))
+                        print("Elapsed Time  : ", datetime.now(pytz.timezone('Asia/Tokyo')).replace(microsecond=0) - start_time)
+                        print("--------------------------------------------------------------------------------------------")
+
                 print_running_reward = 0
                 print_running_episodes = 0
 
@@ -392,19 +402,8 @@ def train():
             if done.all():
                 break
 
-        # save model weights
+            # save model weights
         if args.is_master:
-            if current_ep_reward > best_reward and time_step >= update_timestep*2:
-                best_reward = current_ep_reward
-                best_reward = best_reward.round(decimals=2)
-                checkpoint_path = directory + "PPO_best.pth"
-                print("--------------------------------------------------------------------------------------------")
-                print("saving model at : " + checkpoint_path)
-                ppo_agent.save(checkpoint_path)
-                print("best_model saved || score:{:.2f}".format(best_reward))
-                print("Elapsed Time  : ", datetime.now(pytz.timezone('Asia/Tokyo')).replace(microsecond=0) - start_time)
-                print("--------------------------------------------------------------------------------------------")
-
             if i_episode % save_model_freq == 0 and i_episode > 0:
                 checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, time_step)
                 print("--------------------------------------------------------------------------------------------")
