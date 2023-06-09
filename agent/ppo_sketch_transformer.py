@@ -11,14 +11,13 @@ def pair(t):
     return t if isinstance(t, tuple) else (t, t)
 
 class ActorCritic(nn.Module):
-    def __init__(self, args, state_dim, action_dim, has_continuous_action_space, action_std_init):
+    def __init__(self, device, state_dim, action_dim, has_continuous_action_space, action_std_init):
         super(ActorCritic, self).__init__()
-        if args.is_master:
-            print("PPO_Vannilla")
-            print("============================================================================================")
+        print("PPO_SKT")
+        print("============================================================================================")
 
         self.has_continuous_action_space = has_continuous_action_space
-        self.device = args.device
+        self.device = device
         image_size = 128
         patch_size = 8
         channels = 3

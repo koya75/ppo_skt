@@ -16,7 +16,7 @@ class Sketch_Encoder(nn.Module):
         num_decoder_layers=1,
         seed=0,
     ):
-        super().__init__()
+        super(Sketch_Encoder, self).__init__()
         print("seg_sketch")
         self.sketch_token = MyRandomization(device)
 
@@ -33,6 +33,9 @@ class Sketch_Encoder(nn.Module):
         for p in self.parameters():
             if p.dim() > 1:
                 nn.init.xavier_uniform_(p)
+
+    def forward(self):
+        raise NotImplementedError
 
     def create_query(self, rand):
         # sketch_transformer encoder

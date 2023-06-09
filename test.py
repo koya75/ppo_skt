@@ -22,7 +22,6 @@ def parser():
     parser.add_argument("--outdir", type=str, default="results")
     parser.add_argument("--isaacgym-assets-dir", type=str, default="../isaacgym/assets")
     parser.add_argument("--item-urdf-dir", type=str, default="./urdf")
-    parser.add_argument("--local-rank", type=int, help="local rank (this is automatically set by torch.distributed.launch)")
     parser.add_argument(
         "--model",
         help="choose model",
@@ -137,10 +136,6 @@ def test():
     args = parser()
     urdf = URDF()
     urdf.create_urdf()
-    ### initialize the distributed backend
-    torch.distributed.init_process_group(backend='nccl')
-    ### get the number of GPUs
-    _num_gpus = dist.get_world_size()
     ####### initialize environment hyperparameters ######
     env_name = "Franka"
 
@@ -250,7 +245,7 @@ def test():
             sketch_query = sketch_querys[t-1].unsqueeze(0)
             action = ppo_agent.select_action(state, sketch_query)
             state, reward, done, _ = envs.step(action)
-            ep_reward += reward
+            ep_reward += reward.item()
 
             if done:
                 break

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.distributed as dist
 import time
+from utils import save_checkpoint, load_checkpoint
 
 ################################## PPO Policy ##################################
 class RolloutBuffer:
@@ -51,19 +52,22 @@ class PPO:
 
         if args.model == "vanilla":
             from agent.ppo_vanilla import ActorCritic
-            self.policy = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            self.policy = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
             self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
-            self.policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            self.policy_old = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
         elif args.model == "skt":
             from agent.ppo_sketch_transformer import ActorCritic
             from agent.sketch_encoder import Sketch_Encoder
-            self.sketch_encoder = Sketch_Encoder(self.device).to(self.device)
-            self.policy = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            sketch_encoder = Sketch_Encoder(self.device).to(self.device)
+            self.sketch_encoder = nn.DataParallel(sketch_encoder).to(self.device)
+            policy = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            self.policy = nn.DataParallel(policy).to(self.device)
             self.optimizer1 = torch.optim.Adam(self.sketch_encoder.parameters(), lr=args.lr)
             self.optimizer2 = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
-            self.policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            policy_old = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            self.policy_old = nn.DataParallel(policy_old).to(self.device)
 
         self.policy_old.load_state_dict(self.policy.state_dict())
         
@@ -96,7 +100,7 @@ class PPO:
         print("--------------------------------------------------------------------------------------------")
 
     def select_query(self, rand):
-        sketch_query = self.sketch_encoder.create_query(rand)
+        sketch_query = self.sketch_encoder.module.create_query(rand)
         self.buffer.random.append(rand)
 
         return sketch_query
@@ -106,7 +110,7 @@ class PPO:
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
-                action, action_logprob, state_val = self.policy_old.act(state, skq)
+                action, action_logprob, state_val = self.policy_old.module.act(state, skq)
 
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
@@ -183,29 +187,12 @@ class PPO:
 
         # clear buffer
         self.buffer.clear()
-    
-    def save(self, checkpoint_path):
-        torch.save({'optimizer1_state_dict': self.optimizer1.state_dict(),
-                    'policy_old_state_dict': self.policy_old.state_dict(),
-                    'optimizer2_state_dict': self.optimizer2.state_dict(),
-                    'sketch_encoder_state_dict': self.sketch_encoder.state_dict()}, checkpoint_path)
-   
-    def load(self, checkpoint_path, device=None):
-        ### load checkpoint
-        if device is not None:
-            _ckpt = torch.load(checkpoint_path, map_location=torch.device(device))
-        else:
-            _ckpt = torch.load(checkpoint_path)
 
-        ### load state dicts
-        self.policy_old.load_state_dict(_ckpt['policy_old_state_dict'])
-        self.policy.load_state_dict(_ckpt['policy_old_state_dict'])
-        self.optimizer1.load_state_dict(_ckpt['optimizer1_state_dict'])
-        self.sketch_encoder.load_state_dict(_ckpt['sketch_encoder_state_dict'])
-        self.optimizer2.load_state_dict(_ckpt['optimizer2_state_dict'])
-        
-        #self.policy_old.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
-        #self.policy.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
+    def save(self, checkpoint_path):
+        save_checkpoint(checkpoint_path, self.policy_old, self.optimizer1, self.sketch_encoder, self.optimizer2)
+   
+    def load(self, checkpoint_path):
+        load_checkpoint(checkpoint_path, self.policy, self.optimizer1, self.policy_old, self.sketch_encoder, self.optimizer2, self.device)
         
         
        
