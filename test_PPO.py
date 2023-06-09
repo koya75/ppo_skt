@@ -27,20 +27,16 @@ class PPO:
     def __init__(self, args, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std_init=0.6):
 
         ################################## set device ##################################
-        dist.barrier()
-        if args.is_master:
-            print("============================================================================================")
+        print("============================================================================================")
         # set device to cpu or cuda
         self.device = torch.device('cpu')
         if(torch.cuda.is_available()): 
-            self.device = torch.device('cuda:{}'.format(args.local_rank))
+            self.device = torch.device('cuda:{}'.format(args.gpu))
             torch.cuda.empty_cache()
             print("Device set to : " + str(torch.cuda.get_device_name(self.device)))
         else:
             print("Device set to : cpu")
-        args.device = self.device
-        if args.is_master is False:
-            print("============================================================================================")
+        print("============================================================================================")
 
         self.has_continuous_action_space = has_continuous_action_space
 
@@ -55,39 +51,19 @@ class PPO:
 
         if args.model == "vanilla":
             from agent.ppo_vanilla import ActorCritic
-            policy = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
-            ### distributed
-            self.policy = torch.nn.parallel.DistributedDataParallel(
-                policy, device_ids=[args.local_rank], output_device=args.local_rank
-            )
+            self.policy = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
             self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
-            policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
-            ### distributed
-            self.policy_old = torch.nn.parallel.DistributedDataParallel(
-                policy_old, device_ids=[args.local_rank], output_device=args.local_rank
-            )
-
+            self.policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
         elif args.model == "skt":
             from agent.ppo_sketch_transformer import ActorCritic
             from agent.sketch_encoder import Sketch_Encoder
-            sketch_encoder = Sketch_Encoder(self.device).to(self.device)
-            self.sketch_encoder = torch.nn.parallel.DistributedDataParallel(
-                sketch_encoder, device_ids=[args.local_rank], output_device=args.local_rank
-            )
-            policy = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
-            ### distributed
-            self.policy = torch.nn.parallel.DistributedDataParallel(
-                policy, device_ids=[args.local_rank], output_device=args.local_rank
-            )
+            self.sketch_encoder = Sketch_Encoder(self.device).to(self.device)
+            self.policy = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
             self.optimizer1 = torch.optim.Adam(self.sketch_encoder.parameters(), lr=args.lr)
             self.optimizer2 = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
-            policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
-            ### distributed
-            self.policy_old = torch.nn.parallel.DistributedDataParallel(
-                policy_old, device_ids=[args.local_rank], output_device=args.local_rank
-            )
+            self.policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
 
         self.policy_old.load_state_dict(self.policy.state_dict())
         
@@ -96,8 +72,8 @@ class PPO:
     def set_action_std(self, new_action_std):
         if self.has_continuous_action_space:
             self.action_std = new_action_std
-            self.policy.module.set_action_std(new_action_std)
-            self.policy_old.module.set_action_std(new_action_std)
+            self.policy.set_action_std(new_action_std)
+            self.policy_old.set_action_std(new_action_std)
         else:
             print("--------------------------------------------------------------------------------------------")
             print("WARNING : Calling PPO::set_action_std() on discrete action space policy")
@@ -120,7 +96,7 @@ class PPO:
         print("--------------------------------------------------------------------------------------------")
 
     def select_query(self, rand):
-        sketch_query = self.sketch_encoder.module.create_query(rand)
+        sketch_query = self.sketch_encoder.create_query(rand)
         self.buffer.random.append(rand)
 
         return sketch_query
@@ -130,7 +106,7 @@ class PPO:
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
-                action, action_logprob, state_val = self.policy_old.module.act(state, skq)
+                action, action_logprob, state_val = self.policy_old.act(state, skq)
 
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
@@ -141,7 +117,7 @@ class PPO:
         else:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
-                action, action_logprob, state_val = self.policy_old.module.act(state)
+                action, action_logprob, state_val = self.policy_old.act(state)
             
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
@@ -178,9 +154,9 @@ class PPO:
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
 
-            old_sketch_querys = self.sketch_encoder.module.create_batch_query(old_randoms)
+            old_sketch_querys = self.sketch_encoder.create_batch_query(old_randoms)
             # Evaluating old actions and values
-            logprobs, state_values, dist_entropy = self.policy.module.evaluate(old_states, old_actions, old_sketch_querys)
+            logprobs, state_values, dist_entropy = self.policy.evaluate(old_states, old_actions, old_sketch_querys)
 
             # match state_values tensor dimensions with rewards tensor
             state_values = torch.squeeze(state_values)

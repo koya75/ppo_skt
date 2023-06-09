@@ -244,9 +244,11 @@ def test():
     for ep in range(1, total_test_episodes+1):
         ep_reward = 0
         state, rand = envs.reset()
+        sketch_querys = ppo_agent.select_query(rand)
 
         for t in range(1, max_ep_len+1):
-            action = ppo_agent.select_action(state, rand)
+            sketch_query = sketch_querys[t-1].unsqueeze(0)
+            action = ppo_agent.select_action(state, sketch_query)
             state, reward, done, _ = envs.step(action)
             ep_reward += reward
 
