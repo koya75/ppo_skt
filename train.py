@@ -381,9 +381,10 @@ def train():
                 print_avg_reward = print_running_reward / print_running_episodes
                 print_avg_reward = print_avg_reward.round(decimals=2)#torch.round(print_avg_reward, decimals=2)
                 dist.all_reduce(print_avg_reward, op=dist.ReduceOp.SUM)
+                print_avg_reward = print_avg_reward/_num_gpus
 
                 if args.is_master:
-                    print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {:.2f}".format(i_episode, time_step, print_avg_reward/_num_gpus))
+                    print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {:.2f}".format(i_episode, time_step, print_avg_reward))
 
                     if print_avg_reward > best_reward:
                         best_reward = print_avg_reward

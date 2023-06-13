@@ -15,6 +15,8 @@ from test_PPO import PPO
 import torch.distributed as dist
 from pathlib import Path
 from make_urdf import URDF
+from utils import min_max, make_en_attention, make_en_img, make_de_attention, make_de_img, sk_make_en_attention
+import cv2
 
 
 def parser():
@@ -234,16 +236,63 @@ def test():
 
     print("--------------------------------------------------------------------------------------------")
 
+    image_dir = "results/PPO/PPO_image"
+    if not os.path.exists(image_dir):
+          os.makedirs(image_dir)
+
+    image_dir = image_dir + '/' + env_name + '/'
+    if not os.path.exists(image_dir):
+          os.makedirs(image_dir)
+
+    #### get number of log files in log directory
+    run_num = 0
+    current_num_dir = next(os.walk(image_dir))[1]
+    run_num = len(current_num_dir)
+
+    #### create new log file for each run
+    image_dir_name = image_dir + '/PPO_' + env_name + str(run_num) + '/'
+    if not os.path.exists(image_dir_name):
+        os.makedirs(image_dir_name)
+
     test_running_reward = 0
+    done = True
 
     for ep in range(1, total_test_episodes+1):
+        # make directry
+        epi_dir = os.path.join(image_dir_name, "epi{}".format(ep))
+        if not os.path.exists(epi_dir):
+            os.makedirs(epi_dir)
+        if not os.path.exists(epi_dir + "/raw_img/"):
+            os.makedirs(epi_dir + "/raw_img/")
+        if not os.path.exists(epi_dir + "/image_encoder/"):
+            os.mkdir(epi_dir + "/image_encoder/")
+        #for i in range(10):
+        if not os.path.exists(epi_dir + "/sketch_encoder/"):#.format(i)_{}
+            os.mkdir(epi_dir + "/sketch_encoder/")#.format(i)_{}
+        if not os.path.exists(epi_dir + "/decoder_act/"):
+            os.mkdir(epi_dir + "/decoder_act/")
+
         ep_reward = 0
         state, rand = envs.reset()
-        sketch_querys = ppo_agent.select_query(rand)
+        sketch_querys, sk_att = ppo_agent.select_query(rand)
 
         for t in range(1, max_ep_len+1):
+            if done:
+                raw_list, en_list, de_list = [], [], []
             sketch_query = sketch_querys[t-1].unsqueeze(0)
-            action = ppo_agent.select_action(state, sketch_query)
+            action, raw_img, en_atts, de_atts = ppo_agent.select_action(state, sketch_query)
+
+            raw_img = raw_img[0].permute(1, 2, 0).cpu().detach().numpy()
+            raw_img = raw_img*255
+            raw_img = raw_img.astype(np.uint8)
+            raw_list.append(raw_img)
+
+            en_attention = make_en_attention(en_atts)
+            en_list.append(en_attention)
+
+            de_attention = make_de_attention(de_atts)
+            de_list.append(de_attention)
+
             state, reward, done, _ = envs.step(action)
             ep_reward += reward.item()
 
@@ -256,6 +305,35 @@ def test():
         test_running_reward +=  ep_reward
         print('Episode: {} \t\t Reward: {}'.format(ep, round(ep_reward, 2)))
         ep_reward = 0
+
+        cv2.imwrite(epi_dir + "/raw_img/raw_{0:06d}.png".format(0), raw_list[0])
+        raw_list, en_list, de_list = np.array(raw_list), np.array(en_list), np.array(de_list)
+        de_max, de_min = de_list.reshape(-1).max(), de_list.reshape(-1).min()
+
+        en_mean = np.zeros((en_list.shape[1], en_list.shape[2]))
+        for idx in range(en_list.shape[0]):
+            en_mean += en_list[idx]
+        en_max = max(en_mean.flatten())
+        en_min = min(en_mean.flatten())
+        for x in range(en_mean.shape[0]):
+            for y in range(en_mean.shape[1]):
+                en_mean[x][y] = en_mean[x][y] / en_max
+    
+        #en_mean = np.mean(en_list, axis=0)
+        en_max, en_min = en_mean.reshape(-1).max(), en_mean.reshape(-1).min()
+        en_mean = min_max(en_mean, en_min, en_max)
+        make_en_img(en_mean * 255, raw_list[0], 0, epi_dir, mode="mean")
+        sk_make_en_attention(sk_att, epi_dir)
+
+        for idx in range(len(raw_list)):
+            raw_img = raw_list[idx]
+            en_att = en_list[idx]
+            de_att = de_list[idx]
+            de_att = min_max(de_att, de_min, de_max)
+
+            cv2.imwrite(epi_dir + "/raw_img/raw_{0:06d}.png".format(idx), raw_img)
+            make_en_img(en_att * 255, raw_img, idx, epi_dir)
+            make_de_img(de_att * 255, idx, epi_dir)
 
     print("============================================================================================")
 

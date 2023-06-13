@@ -74,13 +74,36 @@ class PPO:
         self.MseLoss = nn.MSELoss().to(self.device)
 
     def select_query(self, rand):
+        enc_attn_weights = []
+        hooks = [
+            self.sketch_encoder.module.transformer_encoder.layers[-1].self_attn.register_forward_hook(
+                lambda self, input, output: enc_attn_weights.append(output[1])
+            ),
+        ]
+
         sketch_query = self.sketch_encoder.module.create_query(rand)
+
+        for hook in hooks:
+            hook.remove()
+
         self.buffer.random.append(rand)
 
-        return sketch_query
+        enc_attn_weights = enc_attn_weights[0]
+
+        return sketch_query, enc_attn_weights
 
     def select_action(self, state, skq):
 
+        enc_attn_weights, dec_attn_weights = [], []
+        # Last depth Attention
+        hooks = [
+            self.policy_old.module.image_transformer_encoder.layers[-1].self_attn.register_forward_hook(
+                lambda self, input, output: enc_attn_weights.append(output[1])
+            ),
+            self.policy_old.module.transformer_decoder.layers[-1].multihead_attn.register_forward_hook(
+                lambda self, input, output: dec_attn_weights.append(output[1])
+            ),
+        ]
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
@@ -91,7 +114,14 @@ class PPO:
             self.buffer.logprobs.append(action_logprob)
             self.buffer.state_values.append(state_val)
 
-            return action.detach().cpu().numpy()#.flatten()
+            for hook in hooks:
+                hook.remove()
+            
+            raw_img = self.policy_old.module.input_image
+            enc_attn_weights = enc_attn_weights[0]
+            dec_attn_weights = dec_attn_weights[0]
+
+            return action.detach().cpu().numpy(), raw_img, enc_attn_weights, dec_attn_weights
         else:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
