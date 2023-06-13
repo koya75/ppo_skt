@@ -85,7 +85,7 @@ def make_de_img(attns, step, epi_dir):
 
     masked_img = cv2.addWeighted(raw_img, 0.4, mask, 0.6, 0)
     masked_img = cv2.resize(masked_img, dsize=(200, 200))
-    cv2.imwrite(epi_dir + "/decoder_act/de{:06d}.png".format(step), masked_img)
+    cv2.imwrite(epi_dir + "/decoder_act/de_{:06d}.png".format(step), masked_img)
 
 
 def sk_make_en_attention(attns, epi_dir):
