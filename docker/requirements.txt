@@ -12,3 +12,4 @@ ipadic
 einops
 torchtext
 tqdm
+omegaconfig
