@@ -29,6 +29,7 @@ def parser():
         choices=[
             "vanilla",
             "skt",
+            "hoge",
         ],
     )
     parser.add_argument(
@@ -204,10 +205,10 @@ def train():
         item_names = sorted(list(Path(item_asset_root).glob("*.urdf")))
         item_names = [path.stem for path in item_names]
     output_debug_images_dir = args.output_sensor_images_dir#directory
-    from envs.skt_franka_grasping_env import FrankaGraspingEnv
+    from envs.Anymal_env import Anymal
 
     def make_batch_env(num_envs):
-        env = FrankaGraspingEnv(
+        env = Anymal(
             num_envs=num_envs,
             height=height,
             width=width,
@@ -234,7 +235,7 @@ def train():
 
     # action space dimension
     if has_continuous_action_space:
-        action_dim = envs.action_space.shape[0]
+        action_dim = 12#envs.action_space.shape[0]
     else:
         action_dim = envs.action_space.n
 
@@ -333,15 +334,14 @@ def train():
     while time_step <= max_training_timesteps:
 
         dist.barrier()
-        state, rand = envs.reset()
+        state, rand = envs.reset()#
         current_ep_reward = 0
-        sketch_querys = ppo_agent.select_query(rand)
+        #sketch_querys = ppo_agent.select_query(rand)
 
         for t in range(1, max_ep_len+1):
-
-            sketch_query = sketch_querys[t-1].unsqueeze(0)
+            #sketch_query = sketch_querys[t-1].unsqueeze(0)
             # select action with policy
-            action = ppo_agent.select_action(state, sketch_query)
+            action = ppo_agent.select_action(state["obs"])#, sketch_query
             state, reward, done, _ = envs.step(action)
 
             # saving reward and is_terminals
@@ -349,7 +349,7 @@ def train():
             ppo_agent.buffer.is_terminals.append(done)
 
             time_step +=1
-            current_ep_reward += reward
+            current_ep_reward += reward[0]
 
             # update PPO agent
             if time_step % update_timestep == 0:

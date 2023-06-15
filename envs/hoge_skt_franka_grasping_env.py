@@ -13,10 +13,10 @@ import torch
 
 from gym import spaces
 
-from .franka_grasping_module.table_slide import Table
+from .franka_grasping_module.table import Table
 from .franka_grasping_module.franka_slide import Franka
-from .franka_grasping_module.item_slide import Item
-from .franka_grasping_module.camera_slide import Camera
+#from .franka_grasping_module.item_slide import Item
+from .franka_grasping_module.camera_map import Camera
 
 from repos.pfrl.pfrl.env import VectorEnv
 
@@ -53,7 +53,9 @@ class FrankaGraspingEnv(VectorEnv):
         self.width = width
         self.height = height
         self.output_debug_images_dir = output_debug_images_dir
-        self.discrete = discrete
+        self.discrete = True
+        if discrete:
+            self.discrete = False
         self.item_asset_root = item_asset_root
         self.isaacgym_asset_root = isaacgym_asset_root
         if image_type == "color":
@@ -64,6 +66,7 @@ class FrankaGraspingEnv(VectorEnv):
         self.num_items = num_items
         self.item_names = item_names
         self.use_viewer = use_viewer
+        self.random_int = 0
 
         self.device = "cuda" + ":" + str(self.device_id)
         print(self.device)
@@ -176,9 +179,9 @@ class FrankaGraspingEnv(VectorEnv):
             self.sim_params,
             self.viewer,
         )
-        self.item.set_tensors(
+        """self.item.set_tensors(
             self.root_state_tensor, self.num_envs, self.rigid_body_states
-        )
+        )"""
 
         self.axes_geom = gymutil.AxesGeometry(0.3)
 
@@ -259,11 +262,11 @@ class FrankaGraspingEnv(VectorEnv):
             self.max_episode_length,
         )
         ########## table1 ##########
-        self.table1 = Table()
-        self.table1.create(self.gym, self.sim)
+        self.table = Table()
+        self.table.create(self.gym, self.sim)
         """########## tray ##########
         self.tray = Tray()
-        self.tray.create(self.gym, self.sim, self.device, self.isaacgym_asset_root)"""
+        self.tray.create(self.gym, self.sim, self.device, self.isaacgym_asset_root)
         ########## item ##########
         self.item = Item()
         self.item.create(
@@ -273,7 +276,7 @@ class FrankaGraspingEnv(VectorEnv):
             self.num_items,
             self.item_asset_root,
             self.item_names,
-        )
+        )"""
         ########## camera ##########
         self.camera = Camera()
         self.camera.create(self.gym, self.sim, self.width, self.height, self.image_type)
@@ -283,8 +286,8 @@ class FrankaGraspingEnv(VectorEnv):
         print("num envs: ", self.num_envs)
         print("num franka bodies: ", self.franka.num_bodies)
         print("num franka dofs: ", self.franka.num_dofs)
-        print("num table bodies: ", self.table1.num_bodies1)
-        print("num table dofs: ", self.table1.num_dofs1)
+        print("num table bodies: ", self.table.num_bodies)
+        print("num table dofs: ", self.table.num_dofs)
 
         # compute aggregate size
 
@@ -295,27 +298,25 @@ class FrankaGraspingEnv(VectorEnv):
             # create env instance
             env_ptr = self.gym.create_env(self.sim, lower, upper, num_per_row)
             self.envs.append(env_ptr)
-            self.item.select_item()
+            #self.item.select_item()
             # print("num item bodies: ", self.item.num_bodies)
             # print("num item dofs: ", self.item.num_dofs)
 
             max_agg_bodies = (
                 self.franka.num_bodies
-                + self.table1.num_bodies1
-                + self.item.num_bodies
-            )
+                + self.table.num_bodies
+            )#+ self.item.num_bodies
             max_agg_shapes = (
                 self.franka.num_shapes
-                + self.table1.num_shapes1
-                + self.item.num_shapes
-            )
+                + self.table.num_shapes
+            )#+ self.item.num_shapes
 
             self.gym.begin_aggregate(env_ptr, max_agg_bodies, max_agg_shapes, True)
             self.franka.add(env_ptr, i)
-            self.table1.add(env_ptr, i)
+            self.table.add(env_ptr, i)
             #self.tray.add(env_ptr, i)
-            self.item.add(env_ptr, i)
-            self.cam_tensors.append(self.camera.add(env_ptr))
+            #self.item.add(env_ptr, i)
+            self.cam_tensors.append(self.camera.add(env_ptr))#, self.franka.hand_handle
             self.gym.end_aggregate(env_ptr)
 
         self._init_data()
@@ -326,17 +327,29 @@ class FrankaGraspingEnv(VectorEnv):
         self._post_physics_step()
 
         return (
-            tuple(self.obs_buf),
-            tuple(self.rew_buf.cpu().numpy()),
-            tuple(self.done_buf.cpu().numpy()),
-            tuple(self.infos),
+            self.obs_buf,#tuple()
+            self.rew_buf[0],#tuple().cpu().numpy()
+            self.done_buf.cpu().numpy(),#tuple()
+            self.infos,#tuple()
         )
 
     def _reset(self, env_ids):
         self.franka.reset(env_ids)
         self.progress_buf[env_ids] = 0
         self.done_buf[env_ids] = 0
-        for actor_idx in range(self.item.num_actors):
+        for _ in range(80):
+            self.gym.refresh_actor_root_state_tensor(self.sim)
+            self.gym.refresh_dof_state_tensor(self.sim)
+            self.gym.refresh_rigid_body_state_tensor(self.sim)
+            self.gym.refresh_jacobian_tensors(self.sim)
+            self.franka.apply_target_pose()
+            self.gym.simulate(self.sim)
+            self.gym.fetch_results(self.sim, True)
+            self.gym.step_graphics(self.sim)
+            if self.use_viewer:
+                self.gym.draw_viewer(self.viewer, self.sim, True)
+        """for actor_idx in range(self.item.num_actors):
+            self.item.reset_one(env_ids, actor_idx)
             self.item.reset_one(env_ids, actor_idx)
             for _ in range(20):
                 self.gym.refresh_actor_root_state_tensor(self.sim)
@@ -348,29 +361,19 @@ class FrankaGraspingEnv(VectorEnv):
                 self.gym.fetch_results(self.sim, True)
                 self.gym.step_graphics(self.sim)
                 if self.use_viewer:
-                    self.gym.draw_viewer(self.viewer, self.sim, True)
-            self.item.reset_one(env_ids, actor_idx)
-            for _ in range(20):
-                self.gym.refresh_actor_root_state_tensor(self.sim)
-                self.gym.refresh_dof_state_tensor(self.sim)
-                self.gym.refresh_rigid_body_state_tensor(self.sim)
-                self.gym.refresh_jacobian_tensors(self.sim)
-                self.franka.apply_target_pose()
-                self.gym.simulate(self.sim)
-                self.gym.fetch_results(self.sim, True)
-                self.gym.step_graphics(self.sim)
-                if self.use_viewer:
-                    self.gym.draw_viewer(self.viewer, self.sim, True)
+                    self.gym.draw_viewer(self.viewer, self.sim, True)"""
         self._compute_observations()
         return self.obs_buf
 
     def reset(self, mask=None):
         if mask is not None:
             if np.any(~mask): # can not partial envs reset.
+                self.random_int = torch.randint(4, (1,), device=self.device)
                 self._reset(torch.arange(self.num_envs, device=self.device))
         else:
+            self.random_int = torch.randint(4, (1,), device=self.device)
             self._reset(torch.arange(self.num_envs, device=self.device))
-        return self.obs_buf
+        return self.obs_buf, self.random_int
 
     def _init_data(self):
 
@@ -400,11 +403,11 @@ class FrankaGraspingEnv(VectorEnv):
             self.progress_buf,
             self.actions,
             self.global_franka_pos,
-            self.item_pos,
             self.max_episode_length,
             self.hand_pos,
             self.hand_rot,
-        )
+            self.random_int,
+        )#self.item_pos,
 
     def _compute_observations(self):
 
@@ -423,8 +426,8 @@ class FrankaGraspingEnv(VectorEnv):
             self.franka_local_grasp_rot,
             self.franka_local_grasp_pos,
         )
-        self.item_pos = self.item.pos
-        self.item_rot = self.item.rot
+        #self.item_pos = self.item.pos
+        #self.item_rot = self.item.rot
         if False:
             self.gym.clear_lines(self.viewer)
             for i, env in enumerate(self.envs):
@@ -477,7 +480,7 @@ class FrankaGraspingEnv(VectorEnv):
         )
         if self.use_manual_action:
             self.actions[0] = self.manual_action
-        done = self.franka.pre_physics_step(self.actions, self.item.pos, self.n_actions)
+        done = self.franka.pre_physics_step(self.actions, self.n_actions)#, self.item.pos
 
         return done
 
@@ -514,27 +517,41 @@ def compute_franka_reward(
     progress_buf,
     actions,
     global_franka_pos,
-    item_pos,
     max_episode_length,
     hand_pos,
     hand_rot,
-):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, float, Tensor, Tensor) -> Tuple[Tensor, Tensor]
+    randint,
+):#item_pos,
+    # type: (Tensor, Tensor, Tensor, Tensor, float, Tensor, Tensor, Tensor) -> Tuple[Tensor, Tensor]
     flag = "hight" # hight , right , left , pickandplease
 
     # regularization on the actions (summed for each environment)
 
-    dpos = (item_pos - global_franka_pos.unsqueeze(1))
+    gorl = torch.zeros_like(hand_pos)
+    gorl[:, 2] = 5.3
+    if randint==0:
+        gorl[:, 0] = -0.3
+        gorl[:, 1] = 0.6
+    elif randint==1:
+        gorl[:, 0] = 0.3
+        gorl[:, 1] = 0.6
+    elif randint==0:
+        gorl[:, 0] = -0.2
+        gorl[:, 1] = 0.6
+    elif randint==1:
+        gorl[:, 0] = 0.2
+        gorl[:, 1] = 0.6
+    """dpos = (item_pos - global_franka_pos.unsqueeze(1))
     distance = torch.norm(dpos,dim=-1)
     item_x = item_pos[:, 1, 0]
     item_y = item_pos[:, 1, 1]
     item_z = item_pos[:, 1, 2]
     item_offset = torch.zeros_like(item_y)
-    """item_offset = torch.zeros_like(item_z)
-    item_offset[:, 0] = 0.4314"""
+    tem_offset = torch.zeros_like(item_z)
+    item_offset[:, 0] = 0.4314
     item_offset[:] = 0.03
 
-    """if flag == "pickandplease":
+    if flag == "pickandplease":
         item_x = item_pos[:, 0, 0]
         item_y = item_pos[:, 0, 1]
         item_z = item_pos[:, 0, 2]
@@ -570,20 +587,15 @@ def compute_franka_reward(
     rewards = torch.where(
         torch.bitwise_and(height_distance_condition, progress_buf > 10), 1.0, 0.0
     )
-    elif flag == "left":"""
+    elif flag == "left":
     item_y = item_y - item_offset
-    y_condition = torch.round((item_y - 0.65), decimals=2)
+    y_condition = torch.round((item_y - 0.65), decimals=2)"""
+    x_condition = -abs(hand_pos[:, 0] - gorl[:, 0])
+    y_condition = -abs(hand_pos[:, 1] - gorl[:, 1])
+    condition = x_condition + y_condition
 
     rewards = torch.where(
-        progress_buf >= max_episode_length - 1, torch.where(
-            item_y < 0.9, torch.where(
-                item_x > -0.3, torch.where(
-                    item_x > 0, torch.where(
-                        item_x < 0.3, y_condition, -1
-                    ), 0
-                ), -1
-            ), -1
-        ), 0
+        progress_buf >= max_episode_length - 1, condition, 0.0
     ).sum(dim=0)
         
     done_buf = torch.where(

@@ -59,9 +59,9 @@ class PPO:
             self.policy = torch.nn.parallel.DistributedDataParallel(
                 policy, device_ids=[args.local_rank], output_device=args.local_rank
             )
-            self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
+            self.optimizer1 = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
-            policy_old = ActorCritic(args, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            policy_old = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
             ### distributed
             self.policy_old = torch.nn.parallel.DistributedDataParallel(
                 policy_old, device_ids=[args.local_rank], output_device=args.local_rank
@@ -87,6 +87,22 @@ class PPO:
             self.policy_old = torch.nn.parallel.DistributedDataParallel(
                 policy_old, device_ids=[args.local_rank], output_device=args.local_rank
             )
+        else:
+            from agent.ppo_anymal import ActorCritic
+            policy = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            ### distributed
+            self.policy = torch.nn.parallel.DistributedDataParallel(
+                policy, device_ids=[args.local_rank], output_device=args.local_rank
+            )
+            self.optimizer1 = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
+
+            policy_old = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            ### distributed
+            self.policy_old = torch.nn.parallel.DistributedDataParallel(
+                policy_old, device_ids=[args.local_rank], output_device=args.local_rank
+            )
+            self.sketch_encoder=None
+            self.optimizer2=None
 
         self.policy_old.load_state_dict(self.policy.state_dict())
         
@@ -124,19 +140,19 @@ class PPO:
 
         return sketch_query
 
-    def select_action(self, state, skq):
+    def select_action(self, state):#, skq
 
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
-                action, action_logprob, state_val = self.policy_old.module.act(state, skq)
+                action, action_logprob, state_val = self.policy_old.module.act(state)#, skq
 
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
             self.buffer.logprobs.append(action_logprob)
             self.buffer.state_values.append(state_val)
 
-            return action.detach().cpu().numpy()#.flatten()
+            return action.detach()#.cpu().numpy()#.flatten()
         else:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
@@ -168,7 +184,7 @@ class PPO:
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
-        old_randoms = torch.squeeze(torch.stack(self.buffer.random, dim=0)).detach().to(self.device)
+        #old_randoms = torch.squeeze(torch.stack(self.buffer.random, dim=0)).detach().to(self.device)
 
 
         # calculate advantages
@@ -177,9 +193,9 @@ class PPO:
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
 
-            old_sketch_querys = self.sketch_encoder.module.create_batch_query(old_randoms)
+            #old_sketch_querys = self.sketch_encoder.module.create_batch_query(old_randoms)
             # Evaluating old actions and values
-            logprobs, state_values, dist_entropy = self.policy.module.evaluate(old_states, old_actions, old_sketch_querys)
+            logprobs, state_values, dist_entropy = self.policy.module.evaluate(old_states, old_actions)#, old_sketch_querys
 
             # match state_values tensor dimensions with rewards tensor
             state_values = torch.squeeze(state_values)
@@ -196,10 +212,10 @@ class PPO:
             
             # take gradient step
             self.optimizer1.zero_grad()
-            self.optimizer2.zero_grad()
+            #self.optimizer2.zero_grad()
             loss.mean().backward()
             self.optimizer1.step()
-            self.optimizer2.step()
+            #self.optimizer2.step()
             
         # Copy new weights into old policy
         self.policy_old.load_state_dict(self.policy.state_dict())

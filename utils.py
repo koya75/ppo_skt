@@ -4,10 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def save_checkpoint(checkpoint_path, policy_model, optimizer, sketch_encoder_model=None, optimizer2 = None):
-        torch.save({'optimizer1_state_dict': optimizer.state_dict(),
-                    'policy_old_state_dict': policy_model.state_dict(),
-                    'optimizer2_state_dict': optimizer2.state_dict(),
-                    'sketch_encoder_state_dict': sketch_encoder_model.state_dict()}, checkpoint_path)
+        if sketch_encoder_model is not None:
+            torch.save({'optimizer1_state_dict': optimizer.state_dict(),
+                        'policy_old_state_dict': policy_model.state_dict(),
+                        'optimizer2_state_dict': optimizer2.state_dict(),
+                        'sketch_encoder_state_dict': sketch_encoder_model.state_dict()}, checkpoint_path)
+        else:
+            torch.save({'optimizer1_state_dict': optimizer.state_dict(),
+                        'policy_old_state_dict': policy_model.state_dict(),}, checkpoint_path)
         
 def load_checkpoint(checkpoint_path, policy_model, optimizer, old_policy_model, sketch_encoder_model=None, optimizer2 = None, device=None):
         ### load checkpoint
