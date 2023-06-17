@@ -142,9 +142,11 @@ class Anymal(VecTask):
         # other
         self.dt = self.sim_params.dt
         self.max_episode_length_s = self.cfg["env"]["learn"]["episodeLength_s"]
-        self.max_episode_length = int(self.max_episode_length_s / self.dt + 0.5)
+        self.max_episode_length = 500#int(self.max_episode_length_s / self.dt + 0.5)
         self.Kp = self.cfg["env"]["control"]["stiffness"]
         self.Kd = self.cfg["env"]["control"]["damping"]
+
+        self.target_root_positions = torch.zeros((self.num_envs, 2), device=self.device, dtype=torch.float32)
 
         for key in self.rew_scales.keys():
             self.rew_scales[key] *= self.dt
@@ -168,7 +170,8 @@ class Anymal(VecTask):
         self.gym.refresh_dof_force_tensor(self.sim)
 
         # create some wrapper tensors for different slices
-        self.root_states = gymtorch.wrap_tensor(actor_root_state)
+        self.root_states = gymtorch.wrap_tensor(actor_root_state)#.view(self.num_envs, 2, 13)
+        #self.root_states = root[:, 0, :]
         self.dof_state = gymtorch.wrap_tensor(dof_state_tensor)
         self.dof_pos = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 0]
         self.dof_vel = self.dof_state.view(self.num_envs, self.num_dof, 2)[..., 1]
@@ -181,6 +184,9 @@ class Anymal(VecTask):
         self.commands_yaw = self.commands.view(self.num_envs, 3)[..., 2]
         self.default_dof_pos = torch.zeros_like(self.dof_pos, dtype=torch.float, device=self.device, requires_grad=False)
 
+        #self.marker_states = root[:, 1, :]
+        #self.marker_positions = self.marker_states[:, 0:2]
+
         for i in range(self.cfg["env"]["numActions"]):
             name = self.dof_names[i]
             angle = self.named_default_joint_angles[name]
@@ -190,6 +196,7 @@ class Anymal(VecTask):
         self.extras = {}
         self.initial_root_states = self.root_states.clone()
         self.initial_root_states[:] = to_torch(self.base_init_state, device=self.device, requires_grad=False)
+        #self.initial_root_states = torch.cat([self.initial_root_states, self.marker_states])
         self.gravity_vec = to_torch(get_axis_params(-1., self.up_axis_idx), device=self.device).repeat((self.num_envs, 1))
         self.actions = torch.zeros(self.num_envs, self.num_actions, dtype=torch.float, device=self.device, requires_grad=False)
 
@@ -261,6 +268,14 @@ class Anymal(VecTask):
         self.envs = []
         self.cam_tensors = []
 
+        """########## marker ##########
+        asset_options.fix_base_link = True
+        marker_asset = self.gym.create_sphere(self.sim, 0.1, asset_options)
+        default_pose = gymapi.Transform()
+        default_pose.p.x = 3.0
+        default_pose.p.z = 0.5
+        #########################################################"""
+
         ########## camera ##########
         self.camera = Camera()
         self.camera.create(self.gym, self.sim, 128, 128, self.image_type)
@@ -269,12 +284,15 @@ class Anymal(VecTask):
         for i in range(self.num_envs):
             # create env instance
             env_ptr = self.gym.create_env(self.sim, env_lower, env_upper, num_per_row)
-            anymal_handle = self.gym.create_actor(env_ptr, anymal_asset, start_pose, "anymal", i, 1, 0)
+            anymal_handle = self.gym.create_actor(env_ptr, anymal_asset, start_pose, "anymal", i, 1, 1)
             self.gym.set_actor_dof_properties(env_ptr, anymal_handle, dof_props)
             self.gym.enable_actor_dof_force_sensors(env_ptr, anymal_handle)
             self.envs.append(env_ptr)
             self.anymal_handles.append(anymal_handle)
             self.cam_tensors.append(self.camera.add(env_ptr))
+
+            #marker_handle = self.gym.create_actor(env_ptr, marker_asset, default_pose, "marker", -1, 1, 1)
+            #self.gym.set_rigid_body_color(env_ptr, marker_handle, 0, gymapi.MESH_NONE, gymapi.Vec3(1, 0, 0))
 
         for i in range(len(feet_names)):
             self.feet_indices[i] = self.gym.find_actor_rigid_body_handle(self.envs[0], self.anymal_handles[0], feet_names[i])
@@ -302,7 +320,7 @@ class Anymal(VecTask):
         self.rew_buf[:], self.reset_buf[:] = compute_anymal_reward(
             # tensors
             self.root_states,
-            self.commands,
+            self.target_root_positions,
             self.torques,
             self.contact_forces,
             self.knee_indices,
@@ -312,6 +330,7 @@ class Anymal(VecTask):
             # other
             self.base_index,
             self.max_episode_length,
+            self.reset_buf,
         )
 
     def compute_observations(self):
@@ -336,6 +355,11 @@ class Anymal(VecTask):
         )"""
 
         # camera buf
+        """for i, _ in enumerate(self.envs):
+            marker_handle = self.gym.find_actor_handle(self.envs[i], "marker")
+            transform = gymapi.Transform()
+            transform.p = gymapi.Vec3(3.0, 0.0, 0.5)
+            self.gym.set_rigid_transform(self.envs[i], marker_handle, transform)"""
         self.gym.render_all_camera_sensors(self.sim)
         self.gym.start_access_image_tensors(self.sim)
 
@@ -355,6 +379,9 @@ class Anymal(VecTask):
             self.obs_buf = self.obs_buf.permute(0, 3, 1, 2)
 
         self.gym.end_access_image_tensors(self.sim)
+        """for i, _ in enumerate(self.envs):
+            transform.p = gymapi.Vec3(3.0, 0.0, 0.5)
+            self.gym.set_rigid_transform(self.envs[i], marker_handle, transform)"""
 
     def reset_idx(self, env_ids):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
@@ -376,10 +403,14 @@ class Anymal(VecTask):
         self.gym.set_dof_state_tensor_indexed(self.sim,
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
+        
+        self.target_root_positions[env_ids, 0] = 3
+        self.target_root_positions[env_ids, 1] = 0
+        self.marker_positions = self.target_root_positions
 
-        self.commands_x[env_ids] = torch_rand_float(self.command_x_range[0], self.command_x_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([2.], device=self.device)
-        self.commands_y[env_ids] = torch_rand_float(self.command_y_range[0], self.command_y_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([1.], device=self.device)
-        self.commands_yaw[env_ids] = torch_rand_float(self.command_yaw_range[0], self.command_yaw_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([1.], device=self.device)
+        self.commands_x[env_ids] = torch_rand_float(self.command_x_range[0], self.command_x_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([8.], device=self.device)
+        self.commands_y[env_ids] = torch_rand_float(self.command_y_range[0], self.command_y_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([0.], device=self.device)
+        self.commands_yaw[env_ids] = torch_rand_float(self.command_yaw_range[0], self.command_yaw_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([0.], device=self.device)
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 1
@@ -393,7 +424,7 @@ class Anymal(VecTask):
 def compute_anymal_reward(
     # tensors
     root_states,
-    commands,
+    target_pos,
     torques,
     contact_forces,
     knee_indices,
@@ -402,12 +433,25 @@ def compute_anymal_reward(
     rew_scales,
     # other
     base_index,
-    max_episode_length
+    max_episode_length,
+    reset_buf,
 ):
     # (reward, reset, feet_in air, feet_air_time, episode sums)
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Dict[str, float], int, int) -> Tuple[Tensor, Tensor]
+    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Dict[str, float], int, int, Tensor) -> Tuple[Tensor, Tensor]
 
-    # prepare quantities (TODO: return from obs ?)
+    base_pos = root_states[:, 0:2]
+    target_dist = torch.sqrt(torch.square(target_pos - base_pos).sum(-1))
+    pos_reward = 1.0 / (1.0 + target_dist * target_dist)
+    total_reward = pos_reward
+
+
+    # resets due to misbehavior
+    ones = torch.ones_like(reset_buf)
+    zeros = torch.zeros_like(reset_buf)
+
+    # resets due to episode length
+    reset = torch.where(episode_lengths >= max_episode_length - 1, ones, zeros)
+    """# prepare quantities (TODO: return from obs ?)
     base_quat = root_states[:, 3:7]
     base_lin_vel = quat_rotate_inverse(base_quat, root_states[:, 7:10])
     base_ang_vel = quat_rotate_inverse(base_quat, root_states[:, 10:13])
@@ -426,8 +470,9 @@ def compute_anymal_reward(
     # reset agents
     reset = torch.norm(contact_forces[:, base_index, :], dim=1) > 1.
     reset = reset | torch.any(torch.norm(contact_forces[:, knee_indices, :], dim=2) > 1., dim=1)
+    reset = torch.norm(contact_forces[:, base_index, :], dim=1) < -1.
     time_out = episode_lengths >= max_episode_length - 1  # no terminal reward for time-outs
-    reset = reset | time_out
+    reset = reset | time_out"""
 
     return total_reward.detach(), reset
 

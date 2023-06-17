@@ -54,14 +54,14 @@ def parser():
     )
     """parser.add_argument('--gpu-ids', type=str, default='0,1',
                         help='use which gpu to train, must be a \
-                        comma-separated list of integers only (default=0)')
+                        comma-separated list of integers only (default=0)')"""
     parser.add_argument(
         "--gpu",
         "-g",
         type=int,
-        default=0,
+        default=None,
         help="GPU ID (negative value indicates CPU)",
-    )"""
+    )
     parser.add_argument("--num-envs", type=int, default=1)
     parser.add_argument(
         "--log-level",
@@ -140,8 +140,10 @@ def train():
     torch.distributed.init_process_group(backend='nccl')
     ### get the number of GPUs
     _num_gpus = dist.get_world_size()
+    if args.gpu is not None:
+        args.local_rank = args.gpu
     ####### initialize environment hyperparameters ######
-    env_name = "Franka"
+    env_name = "Anymal"
 
     has_continuous_action_space = True  # continuous action space; else discrete
 
