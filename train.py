@@ -143,7 +143,7 @@ def train():
     if args.gpu is not None:
         args.local_rank = args.gpu
     ####### initialize environment hyperparameters ######
-    env_name = "Anymal"
+    env_name = "HSR"
 
     has_continuous_action_space = True  # continuous action space; else discrete
 
