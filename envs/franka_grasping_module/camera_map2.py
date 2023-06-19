@@ -16,7 +16,7 @@ class Camera:
         self.cam_props.width = width
         self.cam_props.height = height
         self.cam_props.enable_tensors = True
-        self.cam_props.horizontal_fov = 70
+        self.cam_props.horizontal_fov = 60
 
         #self.camera_pos = gymapi.Vec3(0.0, 0.2, 0.8)
         #self.camera_target = gymapi.Vec3(0.0, 0.2, 0.0)

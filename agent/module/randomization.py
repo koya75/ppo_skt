@@ -10,8 +10,8 @@ class MyRandomization(nn.Module):
         super().__init__()
 
         self.device=device
-        pattern1 = torch.from_numpy(np.loadtxt('image/pattern1.csv', delimiter=",")).clone().to(device).to(torch.float32)
-        self.pattern1 = pattern1.reshape([10, 5, 2],-1).flatten(1,2)
+        pattern1 = torch.from_numpy(np.loadtxt('image/hsr1.csv', delimiter=",")).clone().to(device).to(torch.float32)
+        self.pattern1 = pattern1.reshape([10, 4, 2],-1).flatten(1,2)
         pattern2 = torch.from_numpy(np.loadtxt('image/pattern2.csv', delimiter=",")).clone().to(device).to(torch.float32)
         self.pattern2 = pattern2.reshape([10, 5, 2],-1).flatten(1,2)
         pattern3 = torch.from_numpy(np.loadtxt('image/pattern3.csv', delimiter=",")).clone().to(device).to(torch.float32)

@@ -140,12 +140,12 @@ class PPO:
 
         return sketch_query
 
-    def select_action(self, state):#, skq
+    def select_action(self, state, skq):#
 
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
-                action, action_logprob, state_val = self.policy_old.module.act(state)#, skq
+                action, action_logprob, state_val = self.policy_old.module.act(state, skq)#
 
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
@@ -184,7 +184,7 @@ class PPO:
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
         old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
-        #old_randoms = torch.squeeze(torch.stack(self.buffer.random, dim=0)).detach().to(self.device)
+        old_randoms = torch.squeeze(torch.stack(self.buffer.random, dim=0)).detach().to(self.device)
 
 
         # calculate advantages
@@ -193,9 +193,9 @@ class PPO:
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
 
-            #old_sketch_querys = self.sketch_encoder.module.create_batch_query(old_randoms)
+            old_sketch_querys = self.sketch_encoder.module.create_batch_query(old_randoms)
             # Evaluating old actions and values
-            logprobs, state_values, dist_entropy = self.policy.module.evaluate(old_states, old_actions)#, old_sketch_querys
+            logprobs, state_values, dist_entropy = self.policy.module.evaluate(old_states, old_actions, old_sketch_querys)#
 
             # match state_values tensor dimensions with rewards tensor
             state_values = torch.squeeze(state_values)
@@ -212,10 +212,10 @@ class PPO:
             
             # take gradient step
             self.optimizer1.zero_grad()
-            #self.optimizer2.zero_grad()
+            self.optimizer2.zero_grad()
             loss.mean().backward()
             self.optimizer1.step()
-            #self.optimizer2.step()
+            self.optimizer2.step()
             
         # Copy new weights into old policy
         self.policy_old.load_state_dict(self.policy.state_dict())
