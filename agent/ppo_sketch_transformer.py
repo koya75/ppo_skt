@@ -94,10 +94,11 @@ class ActorCritic(nn.Module):
     def forward(self):
         raise NotImplementedError
     
-    def act(self, state, skq):#
+    def act(self, state, skq, t):#
 
         if self.has_continuous_action_space:
             # construct positional encodings
+            sketch_query = skq[t].unsqueeze(0)
             self.input_image = state * 1.0
 
             src = self.to_patch_embedding(state)
@@ -107,7 +108,6 @@ class ActorCritic(nn.Module):
 
             memory = self.image_transformer_encoder(src)
 
-            sketch_query = skq
             actor_out = self.transformer_decoder(sketch_query, memory)[0] # 3,bs,256
             action_mean = self.actor(actor_out.permute(1, 0, 2).flatten(1,2))
 

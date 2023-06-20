@@ -360,9 +360,8 @@ def train():
         sketch_querys = ppo_agent.select_query(rand)
 
         for t in range(1, max_ep_len+1):
-            sketch_query = sketch_querys[t-1].unsqueeze(0)
             # select action with policy
-            action = ppo_agent.select_action(state, sketch_query)
+            action = ppo_agent.select_action(state, sketch_querys, t-1)
             state, reward, done, _ = envs.step(action)
 
             # saving reward and is_terminals
