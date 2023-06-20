@@ -189,26 +189,26 @@ def train():
     ################### checkpointing ###################
     run_num_pretrained = 0      #### change this to prevent overwriting weights in same env_name folder
 
-    directory = "results/hoge/PPO/PPO_preTrained"
-    if not os.path.exists(directory):
-          os.makedirs(directory, exist_ok=True)
-
-    directory = directory + '/' + env_name + '/'
-    if not os.path.exists(directory):
-          os.makedirs(directory, exist_ok=True)
-
-    #### get number of log files in log directory
-    run_num = 0
-    current_num_dir = next(os.walk(directory))[1]
-    run_num = len(current_num_dir)
-
-    #### create new log file for each run
-    directory = directory + '/PPO_' + env_name + str(run_num) + '/'
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
     if args.is_master:
+        directory = "results/PPO/PPO_preTrained"
+        if not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+
+        directory = directory + '/' + env_name + '/'
+        if not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
+
+        #### get number of log files in log directory
+        run_num = 0
+        current_num_dir = next(os.walk(directory))[1]
+        run_num = len(current_num_dir)
+
+        #### create new log file for each run
+        directory = directory + '/PPO_' + env_name + str(run_num) + '/'
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+        checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
         print("save checkpoint path : " + checkpoint_path)
         #####################################################
 
@@ -261,25 +261,25 @@ def train():
         action_dim = envs.action_space.n
 
     ###################### logging ######################
-
-    #### log files for multiple runs are NOT overwritten
-    log_dir = "results/PPO/PPO_logs"
-    if not os.path.exists(log_dir):
-          os.makedirs(log_dir, exist_ok=True)
-
-    log_dir = log_dir + '/' + env_name + '/'
-    if not os.path.exists(log_dir):
-          os.makedirs(log_dir)
-
-    #### get number of log files in log directory
-    run_num = 0
-    current_num_files = next(os.walk(log_dir))[2]
-    run_num = len(current_num_files)
-
-    #### create new log file for each run
-    log_f_name = log_dir + '/PPO_' + env_name + "_log_" + str(run_num) + ".csv"
-
     if args.is_master:
+
+        #### log files for multiple runs are NOT overwritten
+        log_dir = "results/PPO/PPO_logs"
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+
+        log_dir = log_dir + '/' + env_name + '/'
+        if not os.path.exists(log_dir):
+            os.makedirs(log_dir)
+
+        #### get number of log files in log directory
+        run_num = 0
+        current_num_files = next(os.walk(log_dir))[2]
+        run_num = len(current_num_files)
+
+        #### create new log file for each run
+        log_f_name = log_dir + '/PPO_' + env_name + "_log_" + str(run_num) + ".csv"
+
         print("current logging run number for " + env_name + " : ", run_num)
         print("logging at : " + log_f_name)
     #####################################################
