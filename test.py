@@ -17,6 +17,7 @@ from pathlib import Path
 from make_urdf import URDF
 from utils import min_max, make_en_attention, make_en_img, make_de_attention, make_de_img, sk_make_en_attention
 import cv2
+from envs import task_map
 
 
 def parser():
@@ -31,6 +32,16 @@ def parser():
         choices=[
             "vanilla",
             "skt",
+        ],
+    )
+    parser.add_argument(
+        "--task",
+        help="choose task",
+        type=str,
+        choices=[
+            "Franka",
+            "HSR",
+            "Anymal",
         ],
     )
     parser.add_argument(
@@ -139,7 +150,7 @@ def test():
     urdf = URDF()
     urdf.create_urdf()
     ####### initialize environment hyperparameters ######
-    env_name = "Franka"
+    env_name = args.task
 
     has_continuous_action_space = True
     max_ep_len = args.max_step           # max timesteps in one episode
@@ -186,10 +197,9 @@ def test():
         item_names = sorted(list(Path(item_asset_root).glob("*.urdf")))
         item_names = [path.stem for path in item_names]
     output_debug_images_dir = args.output_sensor_images_dir#directory
-    from envs.skt_franka_grasping_env import FrankaGraspingEnv
 
     def make_batch_env(num_envs):
-        env = FrankaGraspingEnv(
+        env = task_map[env_name](
             num_envs=num_envs,
             height=height,
             width=width,
@@ -274,11 +284,10 @@ def test():
 
         ep_reward = 0
         state, rand = envs.reset()
+        raw_list, en_list, de_list = [], [], []
         sketch_querys, sk_att = ppo_agent.select_query(rand)
 
         for t in range(1, max_ep_len+1):
-            if done:
-                raw_list, en_list, de_list = [], [], []
             sketch_query = sketch_querys[t-1].unsqueeze(0)
             action, raw_img, en_atts, de_atts = ppo_agent.select_action(state, sketch_query)
 

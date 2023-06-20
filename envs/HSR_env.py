@@ -307,10 +307,7 @@ class HSR(VecTask):
         #one = torch.ones_like(self.actions, device=self.device)
         for i, id in enumerate(self.drive_indices):
             self.actions_zeros[:, id] = self.actions[:,i]#one*0.6
-        """for i, id in enumerate(self.z_wheel_indices):
-            self.actions_zeros[:, id] = self.actions[:,i]"""
         self.targets = self.action_scale * self.actions_zeros + self.targets
-        #self.targets = self.actions# + self.default_dof_pos - self.dof_pos
         self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(self.targets))
 
     def post_physics_step(self):
@@ -369,7 +366,7 @@ class HSR(VecTask):
         self.gym.render_all_camera_sensors(self.sim)
         self.gym.start_access_image_tensors(self.sim)
 
-        self.output_debug_images_dir = "./results/camera"#None
+        self.output_debug_images_dir = None#"./results/camera"
         if self.output_debug_images_dir is not None:
             for i, _ in enumerate(self.envs):
                 os.makedirs(self.output_debug_images_dir, exist_ok=True)
@@ -419,16 +416,18 @@ class HSR(VecTask):
         self.commands_yaw[env_ids] = torch_rand_float(self.command_yaw_range[0], self.command_yaw_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([0.], device=self.device)
 
         self.progress_buf[env_ids] = 0
-        self.reset_buf[env_ids] = 1
+        self.reset_buf[env_ids] = 0
 
         self.targets = self.default_dof_pos
 
-        for _ in range(20):
+        for _ in range(60):
             self.gym.simulate(self.sim)
             self.gym.fetch_results(self.sim, True)
             self.gym.step_graphics(self.sim)
+            self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(self.targets))
             if self.use_viewer:
                 self.gym.draw_viewer(self.viewer, self.sim, True)
+        self.compute_observations()
 
 #####################################################################
 ###=========================jit functions=========================###
@@ -464,7 +463,7 @@ def compute_anymal_reward(
     zeros = torch.zeros_like(reset_buf)
 
     # resets due to episode length
-    reset = torch.where(episode_lengths >= max_episode_length - 1, ones, zeros)
+    reset = torch.where(episode_lengths >= max_episode_length, ones, zeros)
     """# prepare quantities (TODO: return from obs ?)
     base_quat = root_states[:, 3:7]
     base_lin_vel = quat_rotate_inverse(base_quat, root_states[:, 7:10])

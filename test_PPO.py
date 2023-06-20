@@ -121,7 +121,7 @@ class PPO:
             enc_attn_weights = enc_attn_weights[0]
             dec_attn_weights = dec_attn_weights[0]
 
-            return action.detach().cpu().numpy(), raw_img, enc_attn_weights, dec_attn_weights
+            return action.detach(), raw_img, enc_attn_weights, dec_attn_weights#.cpu().numpy()
         else:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()

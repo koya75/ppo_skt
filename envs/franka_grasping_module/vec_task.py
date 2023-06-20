@@ -362,7 +362,7 @@ class VecTask(Env):
         if self.num_states > 0:
             self.obs_dict["states"] = self.get_state()
 
-        return self.obs_dict, self.rew_buf.to(self.rl_device), self.reset_buf.to(self.rl_device), self.extras
+        return self.obs_buf, self.rew_buf.to(self.rl_device), self.reset_buf.to(self.rl_device), self.extras
 
     def zero_actions(self) -> torch.Tensor:
         """Returns a buffer with zero actions.
@@ -386,6 +386,8 @@ class VecTask(Env):
         Returns:
             Observation dictionary
         """
+
+        self.reset_idx(torch.arange(self.num_envs, device=self.rl_device))
         self.obs_dict["obs"] = torch.clamp(self.obs_buf, -self.clip_obs, self.clip_obs).to(self.rl_device)
         self.random_int = torch.randint(1, (1,), device=self.rl_device)
 
@@ -393,7 +395,7 @@ class VecTask(Env):
         if self.num_states > 0:
             self.obs_dict["states"] = self.get_state()
 
-        return self.obs_dict, self.random_int
+        return self.obs_buf, self.random_int
 
     def reset_done(self):
         """Reset the environment.
@@ -410,7 +412,7 @@ class VecTask(Env):
         if self.num_states > 0:
             self.obs_dict["states"] = self.get_state()
 
-        return self.obs_dict, done_env_ids
+        return self.obs_buf, done_env_ids
 
     def render(self, mode="rgb_array"):
         """Draw the frame to the viewer, and check for keyboard events."""

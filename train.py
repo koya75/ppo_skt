@@ -343,7 +343,7 @@ def train():
         for t in range(1, max_ep_len+1):
             sketch_query = sketch_querys[t-1].unsqueeze(0)
             # select action with policy
-            action = ppo_agent.select_action(state["obs"], sketch_query)
+            action = ppo_agent.select_action(state, sketch_query)
             state, reward, done, _ = envs.step(action)
 
             # saving reward and is_terminals
