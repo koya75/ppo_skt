@@ -70,7 +70,7 @@ class PPO:
         elif args.model == "skt":
             from agent.ppo_sketch_transformer import ActorCritic
             from agent.sketch_encoder import Sketch_Encoder
-            sketch_encoder = Sketch_Encoder(self.device).to(self.device)
+            sketch_encoder = Sketch_Encoder(args.task, self.device).to(self.device)
             self.sketch_encoder = torch.nn.parallel.DistributedDataParallel(
                 sketch_encoder, device_ids=[args.local_rank], output_device=args.local_rank
             )

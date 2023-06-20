@@ -10,6 +10,7 @@ def pair(t):
 class Sketch_Encoder(nn.Module):
     def __init__(
         self,
+        task,
         device="cuda",
         hidden_dim = 256,
         num_encoder_layers=1,
@@ -18,7 +19,7 @@ class Sketch_Encoder(nn.Module):
     ):
         super(Sketch_Encoder, self).__init__()
         print("seg_sketch")
-        self.sketch_token = MyRandomization(device)
+        self.sketch_token = MyRandomization(device, task)
 
         self.sketch_encoder = nn.Linear(self.sketch_token.pattern1.shape[1], hidden_dim)
         self.sketch_pos_embedding = nn.Parameter(torch.randn(self.sketch_token.pattern1.shape[0], 1, hidden_dim))

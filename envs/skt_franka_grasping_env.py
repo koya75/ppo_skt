@@ -84,6 +84,7 @@ class FrankaGraspingEnv(VectorEnv):
             self.action_space = spaces.Discrete(self.n_actions)
         else:
             self.action_space = spaces.Box(low=-1, high=1, shape=(2, 1))
+        self.action_shape = self.action_space.shape[0]
 
         self.use_manual_action = False
         self.manual_action = 0
@@ -328,7 +329,7 @@ class FrankaGraspingEnv(VectorEnv):
 
         return (
             self.obs_buf,#tuple()
-            self.rew_buf[0],#tuple().cpu().numpy()
+            self.rew_buf,#tuple().cpu().numpy()
             self.done_buf.cpu().numpy(),#tuple()
             self.infos,#tuple()
         )
@@ -476,7 +477,8 @@ class FrankaGraspingEnv(VectorEnv):
     def _pre_physics_step(self, actions):
         self.actions = (
             #torch.from_numpy(actions.astype(np.float32)).clone().to(self.device)
-            torch.from_numpy(np.array(actions, dtype=np.int32)).detach().clone().to(self.device)
+            #torch.from_numpy(np.array(, dtype=np.int32))
+            actions.detach().clone().to(self.device)
         )
         if self.use_manual_action:
             self.actions[0] = self.manual_action

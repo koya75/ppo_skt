@@ -136,6 +136,7 @@ class HSR(VecTask):
 
         self.cfg["env"]["numObservations"] = [3, 128, 128]#48
         self.cfg["env"]["numActions"] = 2
+        self.action_shape = self.cfg["env"]["numActions"]
 
         super().__init__(config=self.cfg, rl_device=self.device, sim_device=self.device, graphics_device_id=graphics_device_id, headless=headless, virtual_screen_capture=virtual_screen_capture, force_render=force_render)
 

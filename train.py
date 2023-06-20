@@ -15,6 +15,7 @@ from PPO import PPO
 import torch.distributed as dist
 from pathlib import Path
 from make_urdf import URDF
+from envs import task_map
 
 def parser():
     parser = argparse.ArgumentParser()
@@ -30,6 +31,16 @@ def parser():
             "vanilla",
             "skt",
             "hoge",
+        ],
+    )
+    parser.add_argument(
+        "--task",
+        help="choose task",
+        type=str,
+        choices=[
+            "Franka",
+            "HSR",
+            "Anymal",
         ],
     )
     parser.add_argument(
@@ -143,7 +154,7 @@ def train():
     if args.gpu is not None:
         args.local_rank = args.gpu
     ####### initialize environment hyperparameters ######
-    env_name = "HSR"
+    env_name = args.task
 
     has_continuous_action_space = True  # continuous action space; else discrete
 
@@ -207,10 +218,9 @@ def train():
         item_names = sorted(list(Path(item_asset_root).glob("*.urdf")))
         item_names = [path.stem for path in item_names]
     output_debug_images_dir = args.output_sensor_images_dir#directory
-    from envs.HSR_env import HSR
 
     def make_batch_env(num_envs):
-        env = HSR(
+        env = task_map[env_name](
             num_envs=num_envs,
             height=height,
             width=width,
@@ -237,7 +247,7 @@ def train():
 
     # action space dimension
     if has_continuous_action_space:
-        action_dim = 2#envs.action_space.shape[0]
+        action_dim = envs.action_shape
     else:
         action_dim = envs.action_space.n
 
