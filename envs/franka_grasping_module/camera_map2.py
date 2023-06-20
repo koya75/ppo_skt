@@ -21,7 +21,7 @@ class Camera:
         #self.camera_pos = gymapi.Vec3(0.0, 0.2, 0.8)
         #self.camera_target = gymapi.Vec3(0.0, 0.2, 0.0)
         self.transform = gymapi.Transform()
-        self.transform.p = gymapi.Vec3(1.5, 0.0, 4.0)
+        self.transform.p = gymapi.Vec3(0.4, 0.0, 2.0)
         self.transform.r = gymapi.Quat.from_axis_angle(gymapi.Vec3(0,1,0), np.radians(90.0))#*gymapi.Quat.from_axis_angle(gymapi.Vec3(1,0,0), np.radians(180.0))
 
         self.image_type =image_type

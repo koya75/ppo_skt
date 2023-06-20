@@ -40,7 +40,7 @@ class Sketch_Encoder(nn.Module):
 
     def create_query(self, rand):
         # sketch_transformer encoder
-        sketch_query = self.sketch_encoder(self.sketch_token.select(rand)).unsqueeze(1)
+        sketch_query = self.sketch_encoder(self.sketch_token.select(rand).permute(1, 0, 2))
         sketch_query += self.sketch_pos_embedding
         
         out = self.transformer_encoder(sketch_query) # 10,bs,256

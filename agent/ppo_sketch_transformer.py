@@ -107,7 +107,7 @@ class ActorCritic(nn.Module):
 
             memory = self.image_transformer_encoder(src)
 
-            sketch_query = skq.repeat(1, bs, 1)
+            sketch_query = skq
             actor_out = self.transformer_decoder(sketch_query, memory)[0] # 3,bs,256
             action_mean = self.actor(actor_out.permute(1, 0, 2).flatten(1,2))
 

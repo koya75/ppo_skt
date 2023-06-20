@@ -42,6 +42,7 @@ class PPO:
         print("============================================================================================")
 
         self.has_continuous_action_space = has_continuous_action_space
+        self.num_envs = args.num_envs
 
         if has_continuous_action_space:
             self.action_std = action_std_init
@@ -176,16 +177,11 @@ class PPO:
             rewards.insert(0, discounted_reward)
             
         # Normalizing the rewards
-        rewards = torch.tensor(rewards, dtype=torch.float32, device=self.device)
+        rewards = torch.cat(rewards, dim=0)#, dtype=torch.float32, device=self.device
         rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-7)
 
         # convert list to tensor
-        old_states = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(self.device)
-        old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
-        old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
-        old_state_values = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
-        old_randoms = torch.squeeze(torch.stack(self.buffer.random, dim=0)).detach().to(self.device)
-
+        old_states, old_actions, old_logprobs, old_state_values, old_randoms = self.convert_list_to_tensor()
 
         # calculate advantages
         advantages = rewards.detach() - old_state_values.detach()
@@ -230,7 +226,27 @@ class PPO:
     def load(self, checkpoint_path):
         load_checkpoint(checkpoint_path, self.policy, self.optimizer1, self.policy_old, self.sketch_encoder, self.optimizer2, self.device)
         
-        
-       
+    def convert_list_to_tensor(self):
+        old_state = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(self.device)
+        old_action = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
+        old_logprob = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
+        old_state_value = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
+        old_random = torch.squeeze(torch.stack(self.buffer.random, dim=0)).detach().to(self.device)
+
+        old_states, old_actions, old_logprobs, old_state_values, old_randoms = [],[],[],[],[] 
+
+        for i in range(self.num_envs):
+            old_states.append(old_state[:,i])
+            old_actions.append(old_action[:,i])
+            old_logprobs.append(old_logprob[:,i])
+            old_state_values.append(old_state_value[:, i])
+            old_randoms.append(old_random[:,i])
+        old_states = torch.cat(old_states, dim=0)
+        old_actions = torch.cat(old_actions, dim=0)
+        old_logprobs = torch.cat(old_logprobs, dim=0)
+        old_state_values = torch.cat(old_state_values, dim=0)
+        old_randoms = torch.cat(old_randoms, dim=0)
+
+        return old_states, old_actions, old_logprobs, old_state_values, old_randoms
 
 

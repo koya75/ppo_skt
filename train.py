@@ -189,7 +189,7 @@ def train():
     ################### checkpointing ###################
     run_num_pretrained = 0      #### change this to prevent overwriting weights in same env_name folder
 
-    directory = "results/PPO/PPO_preTrained"
+    directory = "results/hoge/PPO/PPO_preTrained"
     if not os.path.exists(directory):
           os.makedirs(directory, exist_ok=True)
 
@@ -197,6 +197,15 @@ def train():
     if not os.path.exists(directory):
           os.makedirs(directory, exist_ok=True)
 
+    #### get number of log files in log directory
+    run_num = 0
+    current_num_dir = next(os.walk(directory))[1]
+    run_num = len(current_num_dir)
+
+    #### create new log file for each run
+    directory = directory + '/PPO_' + env_name + str(run_num) + '/'
+    if not os.path.exists(directory):
+        os.makedirs(directory)
 
     checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
     if args.is_master:
@@ -361,7 +370,7 @@ def train():
             ppo_agent.buffer.is_terminals.append(done)
 
             time_step +=1
-            current_ep_reward += reward[0]
+            current_ep_reward += reward.mean()
 
             # update PPO agent
             if time_step % update_timestep == 0:

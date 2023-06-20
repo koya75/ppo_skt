@@ -367,7 +367,7 @@ class HSR(VecTask):
         self.gym.render_all_camera_sensors(self.sim)
         self.gym.start_access_image_tensors(self.sim)
 
-        self.output_debug_images_dir = None#"./results/camera"
+        self.output_debug_images_dir = "./results/camera"#None
         if self.output_debug_images_dir is not None:
             for i, _ in enumerate(self.envs):
                 os.makedirs(self.output_debug_images_dir, exist_ok=True)
@@ -408,7 +408,7 @@ class HSR(VecTask):
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
         
-        self.target_root_positions[env_ids, 0] = 3
+        self.target_root_positions[env_ids, 0] = 1
         self.target_root_positions[env_ids, 1] = 0
         self.marker_positions = self.target_root_positions
 
