@@ -5,13 +5,14 @@ from torch.distributions import Categorical
 import numpy as np
 from einops import rearrange
 from einops.layers.torch import Rearrange
+from agent.module.randomization import MyRandomization
 from agent.module.transformer import Transformer, TransformerEncoder, TransformerDecoder, TransformerEncoderLayer, TransformerDecoderLayer
 
 def pair(t):
     return t if isinstance(t, tuple) else (t, t)
 
 class ActorCritic(nn.Module):
-    def __init__(self, device, state_dim, action_dim, has_continuous_action_space, action_std_init):
+    def __init__(self, task, device, state_dim, action_dim, has_continuous_action_space, action_std_init):
         super(ActorCritic, self).__init__()
         print("PPO_SKT")
         print("============================================================================================")
@@ -31,6 +32,15 @@ class ActorCritic(nn.Module):
         # actor
         hidden_dim = 256
         if has_continuous_action_space :
+
+            self.sketch_token = MyRandomization(device, task)
+
+            self.sketch_encoder = nn.Linear(self.sketch_token.pattern1.shape[1], hidden_dim)
+            self.sketch_pos_embedding = nn.Parameter(torch.randn(self.sketch_token.pattern1.shape[0], 1, hidden_dim))
+
+            encoder_layer = TransformerEncoderLayer(hidden_dim, nhead=4, dim_feedforward=64,
+                                                    dropout=0.1, activation="relu", normalize_before=False)
+            self.transformer_encoder = TransformerEncoder(encoder_layer, num_encoder_layers)
 
             image_height, image_width = pair(image_size)#copy the number
             patch_height, patch_width = pair(patch_size)#copy the number
@@ -93,6 +103,24 @@ class ActorCritic(nn.Module):
 
     def forward(self):
         raise NotImplementedError
+
+    def create_query(self, rand):
+        # sketch_transformer encoder
+        sketch_query = self.sketch_encoder(self.sketch_token.select(rand).permute(1, 0, 2))
+        sketch_query += self.sketch_pos_embedding
+        
+        out = self.transformer_encoder(sketch_query) # 10,bs,256
+
+        return out
+
+    def create_batch_query(self, rand):
+        # sketch_transformer encoder
+        sketch_query = self.sketch_encoder(self.sketch_token.batch_select(rand)).permute(1, 0, 2)
+        sketch_query += self.sketch_pos_embedding
+        
+        out = self.transformer_encoder(sketch_query).flatten(0,1) # 10,bs,256
+
+        return out
     
     def act(self, state, skq, t):#
 

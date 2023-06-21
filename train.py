@@ -15,6 +15,7 @@ from PPO import PPO
 import torch.distributed as dist
 from pathlib import Path
 from make_urdf import URDF
+from utils import log_plot, save_args
 from envs import task_map
 
 def parser():
@@ -162,7 +163,7 @@ def train():
     max_training_timesteps = args.steps  # break training loop if timeteps > max_training_timesteps
 
     print_freq = max_ep_len * 10        # print avg reward in the interval (in num timesteps)
-    log_freq = max_ep_len * 2           # log avg reward in the interval (in num timesteps)
+    log_freq = max_ep_len * args.eval_batch_interval           # log avg reward in the interval (in num timesteps)
     save_model_freq = int(1e4)          # save model frequency (in num timesteps)
 
     action_std = 0.6                    # starting std for action distribution (Multivariate Normal)
@@ -174,7 +175,7 @@ def train():
     ## Note : print/log frequencies should be > than max_ep_len
 
     ################ PPO hyperparameters ################
-    update_timestep = max_ep_len * 4      # update policy every n timesteps
+    update_timestep = max_ep_len * args.eval_batch_interval      # update policy every n timesteps
     K_epochs = 80               # update policy for K epochs in one PPO update
 
     eps_clip = 0.2          # clip parameter for PPO
@@ -339,6 +340,8 @@ def train():
         log_f = open(log_f_name,"w+")
         log_f.write('episode,timestep,reward\n')
 
+        save_args(os.path.join(directory, 'args.json'), args)
+        
     # printing and logging variables
     print_running_reward = 0
     print_running_episodes = 0
@@ -390,6 +393,7 @@ def train():
                 if args.is_master:
                     log_f.write('{},{},{}\n'.format(i_episode, time_step, log_avg_reward/_num_gpus))
                     log_f.flush()
+                    log_plot(log_f_name, directory)
 
                 log_running_reward = 0
                 log_running_episodes = 0

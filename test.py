@@ -17,23 +17,16 @@ from pathlib import Path
 from make_urdf import URDF
 from utils import min_max, make_en_attention, make_en_img, make_de_attention, make_de_img, sk_make_en_attention
 import cv2
+from utils import load_args
 from envs import task_map
 
 
 def parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--outdir", type=str, default="results")
-    parser.add_argument("--isaacgym-assets-dir", type=str, default="../isaacgym/assets")
-    parser.add_argument("--item-urdf-dir", type=str, default="./urdf")
-    parser.add_argument(
-        "--model",
-        help="choose model",
-        type=str,
-        choices=[
-            "vanilla",
-            "skt",
-        ],
-    )
+    parser.add_argument("--number", type=str, default="results")
+    parser.add_argument('--arg_file', type=str, default='args.json', help='json file name saved training settings')
+    parser.add_argument('--num_episode', type=int, default=10, help='Number of episodes at the time of testing')
+    parser.add_argument("--num-envs", type=int, default=1)
     parser.add_argument(
         "--task",
         help="choose task",
@@ -45,55 +38,11 @@ def parser():
         ],
     )
     parser.add_argument(
-        "--use-lstm", action="store_true", default=False, help="use lstm"
-    )
-    parser.add_argument("--steps", type=int, default=10 ** 7)
-    parser.add_argument("--step_offset", type=int, default=0)
-    parser.add_argument("--update-batch-interval", type=int, default=1)
-    parser.add_argument("--lr", type=float, default=7e-4)
-    parser.add_argument("--gamma", type=float, default=0.99, help="discount factor")
-    parser.add_argument(
-        "--lambd", type=float, default=0.95, help="Lambda-return factor [0, 1]"
-    )
-    parser.add_argument("--minibatch-size", type=int, default=64)
-    parser.add_argument("--epochs", type=int, default=1)
-    parser.add_argument("--eval-batch-interval", type=int, default=10 ** 4)
-    parser.add_argument("--eval-n-runs", type=int, default=128)
-    parser.add_argument("--demo", action="store_true", default=False)
-    parser.add_argument("--load", type=str, default="")
-    parser.add_argument(
-        "--max-grad-norm", type=float, default=40, help="value loss coefficient"
-    )
-    """parser.add_argument('--gpu-ids', type=str, default='0,1',
-                        help='use which gpu to train, must be a \
-                        comma-separated list of integers only (default=0)')"""
-    parser.add_argument(
         "--gpu",
         "-g",
         type=int,
         default=0,
         help="GPU ID (negative value indicates CPU)",
-    )
-    parser.add_argument("--num-envs", type=int, default=1)
-    parser.add_argument(
-        "--log-level",
-        type=int,
-        default=20,
-        help="Logging level. 10:DEBUG, 20:INFO etc.",
-    )
-    parser.add_argument(
-        "--monitor",
-        action="store_true",
-        default=False,
-        help=(
-            "Monitor env. Videos and additional information are saved as output files."
-        ),
-    )
-    parser.add_argument(
-        "--output-sensor-images-dir",
-        type=str,
-        default=None,
-        help="Output sensor images directory. Image files are updated per step",
     )
     parser.add_argument(
         "--render",
@@ -101,39 +50,6 @@ def parser():
         default=False,
         help="Render env states in a GUI window.",
     )
-    parser.add_argument(
-        "--num-items",
-        type=int,
-        default=1,
-        help="Number of items on tray.",
-    )
-    parser.add_argument(
-        "--item-names", nargs="+", default=None, help=["List of item names."]
-    )
-    parser.add_argument("--max-step", type=int, default=12)
-    
-    parser.add_argument(
-        "--target",
-        type=str,
-        default="item21",
-        help="target-item",
-    )
-    parser.add_argument("--drop", action="store_true", default=False, help="use drop")
-    parser.add_argument("--hand", action="store_true", default=False, help="use handcamera")
-    parser.add_argument("--discrete", action="store_true", default=False, help="use handcamera")
-    parser.add_argument(
-        "--mode",
-        help="choose mode",
-        type=str,
-        default="normal",
-        choices=[
-            "normal",
-            "hard",
-            "veryhard",
-        ],
-    )
-
-    
 
     parser.set_defaults(use_lstm=False)
     args = parser.parse_args()
@@ -151,15 +67,19 @@ def test():
     urdf.create_urdf()
     ####### initialize environment hyperparameters ######
     env_name = args.task
+    directory = "results/PPO/PPO_preTrained" + '/' + env_name + '/PPO_' + env_name + args.number + '/'
+    # load train args #####################################
+    print(os.path.join(directory, args.arg_file))
+    train_args = load_args(os.path.join(directory, args.arg_file))
 
     has_continuous_action_space = True
-    max_ep_len = args.max_step           # max timesteps in one episode
+    max_ep_len = train_args['max_step']         # max timesteps in one episode
     action_std = 0.1            # set same std for action distribution which was used while saving
 
     #render = True              # render environment on screen
     frame_delay = 0             # if required; add delay b/w frames
 
-    total_test_episodes = 10    # total num of testing episodes
+    total_test_episodes = args.num_episode    # total num of testing episodes
 
     K_epochs = 80               # update policy for K epochs
     eps_clip = 0.2              # clip parameter for PPO
@@ -187,16 +107,16 @@ def test():
     height = 128
     width = 128
     action_repeat = 30
-    item_asset_root = args.item_urdf_dir
-    isaacgym_asset_root = args.isaacgym_assets_dir
+    item_asset_root = train_args['item_urdf_dir']
+    isaacgym_asset_root = train_args['isaacgym_assets_dir']
     trans_flag = False
 
-    num_items = args.num_items
-    item_names = args.item_names
+    num_items = train_args['num_items']
+    item_names = train_args['item_names']
     if item_names is None:
         item_names = sorted(list(Path(item_asset_root).glob("*.urdf")))
         item_names = [path.stem for path in item_names]
-    output_debug_images_dir = args.output_sensor_images_dir#directory
+    output_debug_images_dir = train_args['output_sensor_images_dir']#directory
 
     def make_batch_env(num_envs):
         env = task_map[env_name](
@@ -214,7 +134,7 @@ def test():
             output_debug_images_dir=output_debug_images_dir,
             device_id=args.gpu,
             n_actions = 0,
-            descentstep = args.max_step,
+            descentstep = train_args['max_step'],
         )
         return env
 
@@ -230,14 +150,14 @@ def test():
         action_dim = envs.action_space.n
 
     # initialize a PPO agent
-    ppo_agent = PPO(args, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std)
+    train_args['gpu'] = args.gpu
+    ppo_agent = PPO(train_args, state_dim, action_dim, lr_actor, lr_critic, gamma, K_epochs, eps_clip, has_continuous_action_space, action_std)
 
     # preTrained weights directory
 
     random_seed = 0             #### set this to load a particular checkpoint trained on random seed
     run_num_pretrained = 0      #### set this to load a particular checkpoint num
 
-    directory = "results/PPO/PPO_preTrained" + '/' + env_name + '/PPO_' + env_name + args.outdir + '/'
     checkpoint_path = directory + "PPO_best.pth"
     #checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
     print("loading network from : " + checkpoint_path)
@@ -288,8 +208,7 @@ def test():
         sketch_querys, sk_att = ppo_agent.select_query(rand)
 
         for t in range(1, max_ep_len+1):
-            sketch_query = sketch_querys[t-1].unsqueeze(0)
-            action, raw_img, en_atts, de_atts = ppo_agent.select_action(state, sketch_query)
+            action, raw_img, en_atts, de_atts = ppo_agent.select_action(state, sketch_querys, t-1)
 
             raw_img = raw_img[0].permute(1, 2, 0).cpu().detach().numpy()
             raw_img = raw_img*255

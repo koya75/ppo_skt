@@ -2,18 +2,13 @@ import torch
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+import json
 
-def save_checkpoint(checkpoint_path, policy_model, optimizer, sketch_encoder_model=None, optimizer2 = None):
-        if sketch_encoder_model is not None:
-            torch.save({'optimizer1_state_dict': optimizer.state_dict(),
-                        'policy_old_state_dict': policy_model.state_dict(),
-                        'optimizer2_state_dict': optimizer2.state_dict(),
-                        'sketch_encoder_state_dict': sketch_encoder_model.state_dict()}, checkpoint_path)
-        else:
-            torch.save({'optimizer1_state_dict': optimizer.state_dict(),
-                        'policy_old_state_dict': policy_model.state_dict(),}, checkpoint_path)
+def save_checkpoint(checkpoint_path, policy_model, optimizer):
+        torch.save({'optimizer1_state_dict': optimizer.state_dict(),
+                    'policy_old_state_dict': policy_model.state_dict(),}, checkpoint_path)
         
-def load_checkpoint(checkpoint_path, policy_model, optimizer, old_policy_model, sketch_encoder_model=None, optimizer2 = None, device=None):
+def load_checkpoint(checkpoint_path, policy_model, old_policy_model, optimizer=None, device=None):
         ### load checkpoint
         if device is not None:
             _ckpt = torch.load(checkpoint_path, map_location=torch.device(device))
@@ -23,16 +18,39 @@ def load_checkpoint(checkpoint_path, policy_model, optimizer, old_policy_model, 
         ### load state dicts
         policy_model.load_state_dict(_ckpt['policy_old_state_dict'])
         old_policy_model.load_state_dict(_ckpt['policy_old_state_dict'])
-        optimizer.load_state_dict(_ckpt['optimizer1_state_dict'])
-        if sketch_encoder_model is not None:
-            sketch_encoder_model.load_state_dict(_ckpt['sketch_encoder_state_dict'])
-        if optimizer2 is not None:
-            optimizer2.load_state_dict(_ckpt['optimizer2_state_dict'])
+        if optimizer is not None :
+            optimizer.load_state_dict(_ckpt['optimizer1_state_dict'])
         
         #self.policy_old.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
         #self.policy.load_state_dict(torch.load(checkpoint_path, map_location=lambda storage, loc: storage))
 
-        return policy_model, optimizer, old_policy_model, sketch_encoder_model, optimizer2
+        return policy_model, optimizer, old_policy_model
+
+def save_args(save_filename, args):
+    with open(save_filename, 'w') as f:
+        json.dump(args.__dict__, f, indent=4)
+
+
+def load_args(load_filename):
+    with open(load_filename, 'r') as f:
+        args = json.load(f)
+    return args
+
+def log_plot(save_path, dir):
+    reader = np.loadtxt(save_path, delimiter=',', skiprows=1, unpack=True)
+    step = reader[1]#[row[0] for row in l[1:]]
+    reward = reader[2]#[row[1] for row in l[1:]]
+    episode = reader[0]#[row[2] for row in l[1:]]
+
+    data01_axis1 = episode
+    data01_rewards = reward
+    fig_1 = plt.figure(figsize=(12, 6))
+    ax_1 = fig_1.add_subplot(111)
+    ax_1.plot(data01_axis1, data01_rewards,  color="k", label="score")
+    ax_1.set_xlabel("episode")
+    ax_1.set_ylabel("reward")
+    ax_1.legend(loc="upper left")
+    plt.savefig(dir+'reward_graph.png', dpi=300)
 
 def min_max(x, mins, maxs, axis=None):
     """_summary_

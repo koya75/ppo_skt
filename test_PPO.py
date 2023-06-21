@@ -32,7 +32,7 @@ class PPO:
         # set device to cpu or cuda
         self.device = torch.device('cpu')
         if(torch.cuda.is_available()): 
-            self.device = torch.device('cuda:{}'.format(args.gpu))
+            self.device = torch.device('cuda:{}'.format(args['gpu']))
             torch.cuda.empty_cache()
             print("Device set to : " + str(torch.cuda.get_device_name(self.device)))
         else:
@@ -50,23 +50,19 @@ class PPO:
         
         self.buffer = RolloutBuffer()
 
-        if args.model == "vanilla":
+        if args['model'] == "vanilla":
             from agent.ppo_vanilla import ActorCritic
             self.policy = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
-            self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
             self.policy_old = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
-        elif args.model == "skt":
+        elif args['model'] == "skt":
             from agent.ppo_sketch_transformer import ActorCritic
-            from agent.sketch_encoder import Sketch_Encoder
-            sketch_encoder = Sketch_Encoder(self.device).to(self.device)
-            self.sketch_encoder = nn.DataParallel(sketch_encoder).to(self.device)
-            policy = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            policy = ActorCritic(args['task'], self.device, state_dim, action_dim, has_continuous_action_space, action_std_init)
+            ### distributed
             self.policy = nn.DataParallel(policy).to(self.device)
-            self.optimizer1 = torch.optim.Adam(self.sketch_encoder.parameters(), lr=args.lr)
-            self.optimizer2 = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
-            policy_old = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            policy_old = ActorCritic(args['task'], self.device, state_dim, action_dim, has_continuous_action_space, action_std_init)
+            ### distributed
             self.policy_old = nn.DataParallel(policy_old).to(self.device)
 
         self.policy_old.load_state_dict(self.policy.state_dict())
@@ -76,12 +72,12 @@ class PPO:
     def select_query(self, rand):
         enc_attn_weights = []
         hooks = [
-            self.sketch_encoder.module.transformer_encoder.layers[-1].self_attn.register_forward_hook(
+            self.policy_old.module.transformer_encoder.layers[-1].self_attn.register_forward_hook(
                 lambda self, input, output: enc_attn_weights.append(output[1])
             ),
         ]
 
-        sketch_query = self.sketch_encoder.module.create_query(rand)
+        sketch_query = self.policy_old.module.create_query(rand)
 
         for hook in hooks:
             hook.remove()
@@ -92,7 +88,7 @@ class PPO:
 
         return sketch_query, enc_attn_weights
 
-    def select_action(self, state, skq):
+    def select_action(self, state, skq, t):
 
         enc_attn_weights, dec_attn_weights = [], []
         # Last depth Attention
@@ -107,7 +103,7 @@ class PPO:
         if self.has_continuous_action_space:
             with torch.no_grad():
                 state = state.to(self.device)#torch.FloatTensor()
-                action, action_logprob, state_val = self.policy_old.module.act(state, skq)
+                action, action_logprob, state_val = self.policy_old.module.act(state, skq, t)
 
             self.buffer.states.append(state)
             self.buffer.actions.append(action)
@@ -135,10 +131,10 @@ class PPO:
             return action.item()
         
     def save(self, checkpoint_path):
-        save_checkpoint(checkpoint_path, self.policy_old, self.optimizer1, self.sketch_encoder, self.optimizer2)
+        save_checkpoint(checkpoint_path, self.policy_old, self.optimizer)
    
     def load(self, checkpoint_path):
-        load_checkpoint(checkpoint_path, self.policy, self.optimizer1, self.policy_old, self.sketch_encoder, self.optimizer2, self.device)
+        load_checkpoint(checkpoint_path, self.policy, self.policy_old, None, self.device)
         
         
        

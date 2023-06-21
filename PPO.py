@@ -60,7 +60,7 @@ class PPO:
             self.policy = torch.nn.parallel.DistributedDataParallel(
                 policy, device_ids=[args.local_rank], output_device=args.local_rank
             )
-            self.optimizer1 = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
+            self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
             policy_old = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
             ### distributed
@@ -70,20 +70,14 @@ class PPO:
 
         elif args.model == "skt":
             from agent.ppo_sketch_transformer import ActorCritic
-            from agent.sketch_encoder import Sketch_Encoder
-            sketch_encoder = Sketch_Encoder(args.task, self.device).to(self.device)
-            self.sketch_encoder = torch.nn.parallel.DistributedDataParallel(
-                sketch_encoder, device_ids=[args.local_rank], output_device=args.local_rank
-            )
-            policy = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            policy = ActorCritic(args.task, self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
             ### distributed
             self.policy = torch.nn.parallel.DistributedDataParallel(
                 policy, device_ids=[args.local_rank], output_device=args.local_rank
             )
-            self.optimizer1 = torch.optim.Adam(self.sketch_encoder.parameters(), lr=args.lr)
-            self.optimizer2 = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
+            self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
-            policy_old = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
+            policy_old = ActorCritic(args.task, self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
             ### distributed
             self.policy_old = torch.nn.parallel.DistributedDataParallel(
                 policy_old, device_ids=[args.local_rank], output_device=args.local_rank
@@ -95,7 +89,7 @@ class PPO:
             self.policy = torch.nn.parallel.DistributedDataParallel(
                 policy, device_ids=[args.local_rank], output_device=args.local_rank
             )
-            self.optimizer1 = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
+            self.optimizer = torch.optim.Adam(self.policy.parameters(), lr=args.lr)
 
             policy_old = ActorCritic(self.device, state_dim, action_dim, has_continuous_action_space, action_std_init).to(self.device)
             ### distributed
@@ -136,7 +130,7 @@ class PPO:
         print("--------------------------------------------------------------------------------------------")
 
     def select_query(self, rand):
-        sketch_query = self.sketch_encoder.module.create_query(rand)
+        sketch_query = self.policy_old.module.create_query(rand)
         self.buffer.random.append(rand)
 
         return sketch_query
@@ -189,7 +183,7 @@ class PPO:
         # Optimize policy for K epochs
         for _ in range(self.K_epochs):
 
-            old_sketch_querys = self.sketch_encoder.module.create_batch_query(old_randoms)
+            old_sketch_querys = self.policy.module.create_batch_query(old_randoms)
             # Evaluating old actions and values
             logprobs, state_values, dist_entropy = self.policy.module.evaluate(old_states, old_actions, old_sketch_querys)#
 
@@ -207,11 +201,9 @@ class PPO:
             loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values.squeeze(), rewards.squeeze()) - 0.01 * dist_entropy
             
             # take gradient step
-            self.optimizer1.zero_grad()
-            self.optimizer2.zero_grad()
+            self.optimizer.zero_grad()
             loss.mean().backward()
-            self.optimizer1.step()
-            self.optimizer2.step()
+            self.optimizer.step()
             
         # Copy new weights into old policy
         self.policy_old.load_state_dict(self.policy.state_dict())
@@ -221,10 +213,10 @@ class PPO:
         
     
     def save(self, checkpoint_path):
-        save_checkpoint(checkpoint_path, self.policy_old, self.optimizer1, self.sketch_encoder, self.optimizer2)
+        save_checkpoint(checkpoint_path, self.policy_old, self.optimizer)
    
     def load(self, checkpoint_path):
-        load_checkpoint(checkpoint_path, self.policy, self.optimizer1, self.policy_old, self.sketch_encoder, self.optimizer2, self.device)
+        load_checkpoint(checkpoint_path, self.policy, self.optimizer, self.policy_old, self.device)
         
     def convert_list_to_tensor(self, reward):
         old_state = torch.squeeze(torch.stack(self.buffer.states, dim=0)).detach().to(self.device)
