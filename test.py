@@ -237,7 +237,7 @@ def test():
     random_seed = 0             #### set this to load a particular checkpoint trained on random seed
     run_num_pretrained = 0      #### set this to load a particular checkpoint num
 
-    directory = "results/PPO/PPO_preTrained" + '/' + env_name + '/'
+    directory = "results/PPO/PPO_preTrained" + '/' + env_name + '/PPO_' + env_name + args.outdir + '/'
     checkpoint_path = directory + "PPO_best.pth"
     #checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, run_num_pretrained)
     print("loading network from : " + checkpoint_path)
