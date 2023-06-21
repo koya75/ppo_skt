@@ -369,10 +369,10 @@ class FrankaGraspingEnv(VectorEnv):
     def reset(self, mask=None):
         if mask is not None:
             if np.any(~mask): # can not partial envs reset.
-                self.random_int = torch.randint(4, (1,), device=self.device)
+                self.random_int = torch.randint(1, (self.num_envs,), device=self.device)
                 self._reset(torch.arange(self.num_envs, device=self.device))
         else:
-            self.random_int = torch.randint(4, (1,), device=self.device)
+            self.random_int = torch.randint(1, (self.num_envs,), device=self.device)
             self._reset(torch.arange(self.num_envs, device=self.device))
         return self.obs_buf, self.random_int
 
@@ -529,76 +529,28 @@ def compute_franka_reward(
 
     # regularization on the actions (summed for each environment)
 
-    gorl = torch.zeros_like(hand_pos)
-    gorl[:, 2] = 5.3
-    if randint==0:
-        gorl[:, 0] = -0.3
-        gorl[:, 1] = 0.6
-    elif randint==1:
-        gorl[:, 0] = 0.3
-        gorl[:, 1] = 0.6
-    elif randint==0:
-        gorl[:, 0] = -0.2
-        gorl[:, 1] = 0.6
-    elif randint==1:
-        gorl[:, 0] = 0.2
-        gorl[:, 1] = 0.6
-    """dpos = (item_pos - global_franka_pos.unsqueeze(1))
-    distance = torch.norm(dpos,dim=-1)
-    item_x = item_pos[:, 1, 0]
-    item_y = item_pos[:, 1, 1]
-    item_z = item_pos[:, 1, 2]
-    item_offset = torch.zeros_like(item_y)
-    tem_offset = torch.zeros_like(item_z)
-    item_offset[:, 0] = 0.4314
-    item_offset[:] = 0.03
+    target_hand_pos = hand_pos[:, 0:2]
+    gorl = torch.zeros_like(target_hand_pos)
+    for i in range(len(randint)):
+        if randint[i]==0:
+            gorl[i, 0] = -0.3
+            gorl[i, 1] = 0.6
+        elif randint[i]==1:
+            gorl[i, 0] = 0.3
+            gorl[i, 1] = 0.6
+        elif randint[i]==0:
+            gorl[i, 0] = -0.2
+            gorl[i, 1] = 0.6
+        elif randint[i]==1:
+            gorl[i, 0] = 0.2
+            gorl[i, 1] = 0.6
 
-    if flag == "pickandplease":
-        item_x = item_pos[:, 0, 0]
-        item_y = item_pos[:, 0, 1]
-        item_z = item_pos[:, 0, 2]
-        
-        x_low = item_x >= -0.08
-        x_up  = item_x <= 0.08
-        y_low = item_y >= 0.45
-        y_up  = item_y <= 0.65
-        z_high = item_z <= 0.5
-
-        condition = (x_low * x_up * y_low * y_up * z_high).sum() > 0
-        reward1 = torch.where(
-            torch.bitwise_and(condition, progress_buf > 10), 1.0, 0.0
-        )
-    elif flag == "hight":
-        item_z = item_z - item_offset
-        distance_condition = distance < 0.5
-        height_condition = item_z >= 0.29
-        height_distance_condition = (height_condition * distance_condition).sum(dim=1) > 0
-
-        reward2 = torch.where(
-            torch.bitwise_and(height_distance_condition, progress_buf > 10), 1.0, 0.0
-        )
-    elif flag == "right":
-    item_y = item_y - item_offset
-    distance_condition = distance < 0.5
-    y_condition = item_y >= 0.6
-    condition_y = item_y < 0.9
-    x_condition = item_x < 0
-    condition_x = item_x > -0.3
-    height_distance_condition = (y_condition * x_condition * condition_y * condition_x * distance_condition).sum(dim=1) > 0
-
-    rewards = torch.where(
-        torch.bitwise_and(height_distance_condition, progress_buf > 10), 1.0, 0.0
-    )
-    elif flag == "left":
-    item_y = item_y - item_offset
-    y_condition = torch.round((item_y - 0.65), decimals=2)"""
-    x_condition = -abs(hand_pos[:, 0] - gorl[:, 0])
-    y_condition = -abs(hand_pos[:, 1] - gorl[:, 1])
-    condition = x_condition + y_condition
-
-    rewards = torch.where(
+    target_dist = torch.sqrt(torch.square(gorl - target_hand_pos).sum(-1))
+    pos_reward = 1.0 / (1.0 + target_dist * target_dist)
+    rewards = pos_reward
+    """rewards = torch.where(
         progress_buf >= max_episode_length - 1, condition, 0.0
-    ).sum(dim=0)
+    )"""
         
     done_buf = torch.where(
         progress_buf >= max_episode_length - 1, torch.ones_like(done_buf), done_buf
