@@ -175,7 +175,7 @@ def train():
     ## Note : print/log frequencies should be > than max_ep_len
 
     ################ PPO hyperparameters ################
-    update_timestep = max_ep_len * args.eval_batch_interval      # update policy every n timesteps
+    update_timestep = max_ep_len * args.update_batch_interval      # update policy every n timesteps
     K_epochs = 80               # update policy for K epochs in one PPO update
 
     eps_clip = 0.2          # clip parameter for PPO
@@ -185,6 +185,8 @@ def train():
     lr_critic = 0.001       # learning rate for critic network
 
     random_seed = 1         # set random seed if required (0 = no random seed)
+
+    eval_episode_interval = args.eval_batch_interval
     #####################################################
 
     ################### checkpointing ###################
@@ -341,13 +343,6 @@ def train():
         log_f.write('episode,timestep,reward\n')
 
         save_args(os.path.join(directory, 'args.json'), args)
-        
-    # printing and logging variables
-    print_running_reward = 0
-    print_running_episodes = 0
-
-    log_running_reward = 0
-    log_running_episodes = 0
 
     best_reward = -9999
 
@@ -382,67 +377,61 @@ def train():
             if has_continuous_action_space and time_step % action_std_decay_freq == 0:
                 ppo_agent.decay_action_std(action_std_decay_rate, min_action_std)
 
-            # log in logging file
-            if time_step % log_freq == 0:
-
-                # log average reward till last episode
-                log_avg_reward = log_running_reward / log_running_episodes
-                log_avg_reward = torch.round(log_avg_reward, decimals=4)
-                dist.all_reduce(log_avg_reward, op=dist.ReduceOp.SUM)
-
-                if args.is_master:
-                    log_f.write('{},{},{}\n'.format(i_episode, time_step, log_avg_reward/_num_gpus))
-                    log_f.flush()
-                    log_plot(log_f_name, directory)
-
-                log_running_reward = 0
-                log_running_episodes = 0
-
-            # printing average reward
-            if time_step % print_freq == 0:
-
-                # print average reward till last episode
-                print_avg_reward = print_running_reward / print_running_episodes
-                print_avg_reward = print_avg_reward.round(decimals=2)#torch.round(print_avg_reward, decimals=2)
-                dist.all_reduce(print_avg_reward, op=dist.ReduceOp.SUM)
-                print_avg_reward = print_avg_reward/_num_gpus
-
-                if args.is_master:
-                    print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {:.2f}".format(i_episode, time_step, print_avg_reward))
-
-                    if print_avg_reward > best_reward:
-                        best_reward = print_avg_reward
-                        checkpoint_path = directory + "PPO_best.pth"
-                        print("--------------------------------------------------------------------------------------------")
-                        print("saving model at : " + checkpoint_path)
-                        ppo_agent.save(checkpoint_path)
-                        print("best_model saved || score:{:.2f}".format(best_reward))
-                        print("Elapsed Time  : ", datetime.now(pytz.timezone('Asia/Tokyo')).replace(microsecond=0) - start_time)
-                        print("--------------------------------------------------------------------------------------------")
-
-                print_running_reward = 0
-                print_running_episodes = 0
-
             # break; if the episode is over
             if done.all():
                 break
+        
+        current_ep_reward = current_ep_reward.round(decimals=2)#torch.round(print_avg_reward, decimals=2)
+        dist.all_reduce(current_ep_reward, op=dist.ReduceOp.SUM)
+        current_ep_reward = current_ep_reward/_num_gpus
 
-            # save model weights
         if args.is_master:
-            if i_episode % save_model_freq == 0 and i_episode > 0:
-                checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, time_step)
-                print("--------------------------------------------------------------------------------------------")
-                print("saving model at : " + checkpoint_path)
-                ppo_agent.save(checkpoint_path)
-                print("model saved")
-                print("Elapsed Time  : ", datetime.now(pytz.timezone('Asia/Tokyo')).replace(microsecond=0) - start_time)
-                print("--------------------------------------------------------------------------------------------")
+            print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {:.2f}".format(i_episode, time_step, current_ep_reward))
 
-        print_running_reward += current_ep_reward
-        print_running_episodes += 1
+        #################### eval ####################
+        if i_episode%eval_episode_interval==0 and i_episode > 0:
+            dist.barrier()
+            state, rand  = envs.reset()#
+            eval_reward = 0
+            sketch_querys = ppo_agent.select_query(rand)
+            for t in range(1, max_ep_len+1):
+                # select action with policy
+                action = ppo_agent.select_action(state, sketch_querys, t-1)
+                state, reward, done, _ = envs.step(action)
 
-        log_running_reward += current_ep_reward
-        log_running_episodes += 1
+                # saving reward and is_terminals
+                ppo_agent.buffer.rewards.append(reward)
+                ppo_agent.buffer.is_terminals.append(done)
+
+                eval_reward += reward.mean()
+            ppo_agent.buffer.clear()
+            dist.all_reduce(eval_reward, op=dist.ReduceOp.SUM)
+            eval_reward = eval_reward/_num_gpus
+            # save model weights
+            if args.is_master:
+                print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {:.2f}".format(i_episode, time_step, eval_reward.round(decimals=2)))
+                log_f.write('{},{},{}\n'.format(i_episode, time_step, eval_reward.round(decimals=2)))
+                log_f.flush()
+                log_plot(log_f_name, directory)
+
+                if eval_reward > best_reward:
+                    best_reward = eval_reward
+                    checkpoint_path = directory + "PPO_best.pth"
+                    print("--------------------------------------------------------------------------------------------")
+                    print("saving model at : " + checkpoint_path)
+                    ppo_agent.save(checkpoint_path)
+                    print("best_model saved || score:{:.2f}".format(best_reward))
+                    print("Elapsed Time  : ", datetime.now(pytz.timezone('Asia/Tokyo')).replace(microsecond=0) - start_time)
+                    print("--------------------------------------------------------------------------------------------")
+                if i_episode % save_model_freq == 0:
+                    checkpoint_path = directory + "PPO_{}_{}_{}.pth".format(env_name, random_seed, time_step)
+                    print("--------------------------------------------------------------------------------------------")
+                    print("saving model at : " + checkpoint_path)
+                    ppo_agent.save(checkpoint_path)
+                    print("model saved")
+                    print("Elapsed Time  : ", datetime.now(pytz.timezone('Asia/Tokyo')).replace(microsecond=0) - start_time)
+                    print("--------------------------------------------------------------------------------------------")                    
+        ##############################################
 
         i_episode += 1
 

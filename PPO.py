@@ -223,7 +223,7 @@ class PPO:
         old_action = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach().to(self.device)
         old_logprob = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach().to(self.device)
         old_state_value = torch.squeeze(torch.stack(self.buffer.state_values, dim=0)).detach().to(self.device)
-        old_random = torch.squeeze(torch.stack(self.buffer.random, dim=0)).detach().to(self.device)
+        old_random = torch.stack(self.buffer.random, dim=0).detach().to(self.device)
 
         old_states, old_actions, old_logprobs, old_state_values, old_randoms, rewards = [],[],[],[],[],[]
 
