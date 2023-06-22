@@ -547,10 +547,9 @@ def compute_franka_reward(
 
     target_dist = torch.sqrt(torch.square(gorl - target_hand_pos).sum(-1))
     pos_reward = 1.0 / (1.0 + target_dist * target_dist)
-    rewards = pos_reward
-    """rewards = torch.where(
-        progress_buf >= max_episode_length - 1, condition, 0.0
-    )"""
+    rewards = torch.where(
+        progress_buf >= max_episode_length - 1, pos_reward, 0.0
+    )
         
     done_buf = torch.where(
         progress_buf >= max_episode_length - 1, torch.ones_like(done_buf), done_buf

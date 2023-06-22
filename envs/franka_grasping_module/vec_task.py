@@ -377,7 +377,7 @@ class VecTask(Env):
     def reset_idx(self, env_idx):
         """Reset environment with indces in env_idx. 
         Should be implemented in an environment class inherited from VecTask.
-        """  
+        """
         pass
 
     def reset(self):
@@ -386,10 +386,8 @@ class VecTask(Env):
         Returns:
             Observation dictionary
         """
-
         self.reset_idx(torch.arange(self.num_envs, device=self.rl_device))
         self.obs_dict["obs"] = torch.clamp(self.obs_buf, -self.clip_obs, self.clip_obs).to(self.rl_device)
-        self.random_int = torch.randint(1, (self.num_envs,), device=self.rl_device)
 
         # asymmetric actor-critic
         if self.num_states > 0:

@@ -391,6 +391,7 @@ class HSR(VecTask):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
         if self.randomize:
             self.apply_randomizations(self.randomization_params)
+        self.random_int = torch.randint(1, (self.num_envs,), device=self.rl_device)
 
         positions_offset = torch_rand_float(0.0, 0.1, (len(env_ids), self.num_dof), device=self.device)
         velocities = torch_rand_float(-0.1, 0.1, (len(env_ids), self.num_dof), device=self.device)
@@ -408,13 +409,11 @@ class HSR(VecTask):
                                               gymtorch.unwrap_tensor(self.dof_state),
                                               gymtorch.unwrap_tensor(env_ids_int32), len(env_ids_int32))
         
-        self.target_root_positions[env_ids, 0] = 1
-        self.target_root_positions[env_ids, 1] = 0
+        for i in range(len(env_ids)):
+            if self.random_int[i] == 0:
+                self.target_root_positions[i, 0] = 1
+                self.target_root_positions[i, 1] = 0
         self.marker_positions = self.target_root_positions
-
-        self.commands_x[env_ids] = torch_rand_float(self.command_x_range[0], self.command_x_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([8.], device=self.device)
-        self.commands_y[env_ids] = torch_rand_float(self.command_y_range[0], self.command_y_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([0.], device=self.device)
-        self.commands_yaw[env_ids] = torch_rand_float(self.command_yaw_range[0], self.command_yaw_range[1], (len(env_ids), 1), device=self.device).squeeze()#torch.tensor([0.], device=self.device)
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0
@@ -456,7 +455,9 @@ def compute_anymal_reward(
     base_pos = root_states[:, 0:2]
     target_dist = torch.sqrt(torch.square(target_pos - base_pos).sum(-1))
     pos_reward = 1.0 / (1.0 + target_dist * target_dist)
-    total_reward = pos_reward
+    total_reward = torch.where(
+        episode_lengths >= max_episode_length, pos_reward, 0.0
+    )
 
 
     # resets due to misbehavior
