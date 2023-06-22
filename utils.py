@@ -36,7 +36,7 @@ def load_args(load_filename):
         args = json.load(f)
     return args
 
-def log_plot(save_path, dir):
+def log_plot(save_path, dir, env_name):
     reader = np.loadtxt(save_path, delimiter=',', skiprows=1, unpack=True)
     step = reader[1]#[row[0] for row in l[1:]]
     reward = reader[2]#[row[1] for row in l[1:]]
@@ -50,7 +50,7 @@ def log_plot(save_path, dir):
     ax_1.set_xlabel("episode")
     ax_1.set_ylabel("reward")
     ax_1.legend(loc="upper left")
-    plt.savefig(dir+'reward_graph.png', dpi=300)
+    plt.savefig(dir+env_name+'_reward_graph.png', dpi=300)
 
 def min_max(x, mins, maxs, axis=None):
     """_summary_

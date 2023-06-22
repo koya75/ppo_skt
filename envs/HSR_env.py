@@ -391,7 +391,7 @@ class HSR(VecTask):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
         if self.randomize:
             self.apply_randomizations(self.randomization_params)
-        self.random_int = torch.randint(1, (self.num_envs,), device=self.rl_device)
+        self.random_int = torch.randint(3, (self.num_envs,), device=self.rl_device)
 
         positions_offset = torch_rand_float(0.0, 0.1, (len(env_ids), self.num_dof), device=self.device)
         velocities = torch_rand_float(-0.1, 0.1, (len(env_ids), self.num_dof), device=self.device)
@@ -413,7 +413,13 @@ class HSR(VecTask):
             if self.random_int[i] == 0:
                 self.target_root_positions[i, 0] = 1
                 self.target_root_positions[i, 1] = 0
-        self.marker_positions = self.target_root_positions
+            elif self.random_int[i] == 1:
+                self.target_root_positions[i, 0] = 1
+                self.target_root_positions[i, 1] = -1
+            elif self.random_int[i] == 2:
+                self.target_root_positions[i, 0] = 1
+                self.target_root_positions[i, 1] = 1
+        #self.marker_positions = self.target_root_positions
 
         self.progress_buf[env_ids] = 0
         self.reset_buf[env_ids] = 0

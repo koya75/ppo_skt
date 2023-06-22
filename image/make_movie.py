@@ -12,6 +12,7 @@ warnings.simplefilter('ignore')
 parser = argparse.ArgumentParser(description='Rainbow AQT')
 parser.add_argument('--mode', type=str, default='raw', choices=['raw', 'encoder', 'decoder', 'sketch_decoder', 'sketch_encoder', 'sketch_action_decoder'], metavar='CUDA', help='Cuda Device')
 parser.add_argument('--load-dir', type=str, default='visuals/breakout_rainbow_aqt/epi1/', help='Load data')
+parser.add_argument('--task', type=str, default='HSR', choices=['Franka', 'HSR', 'Anymal'])
 
 # Setup
 args = parser.parse_args()
@@ -26,7 +27,7 @@ for k, v in vars(args).items():
 print("Make movie: {}".format(args.mode))
 fourcc = cv2.VideoWriter_fourcc('m', 'p', '4', 'v')
 if args.mode == "raw":
-  movie_path = os.path.join(args.load_dir, "raw_movie.mp4")
+  movie_path = os.path.join(args.load_dir, args.task + "_raw_movie.mp4")
   video = cv2.VideoWriter(movie_path, fourcc, 2.0, (128, 128))
 
   file_num = sum(os.path.isfile(os.path.join(args.load_dir + "raw_img/", name)) for name in os.listdir(args.load_dir + "raw_img/"))
@@ -37,7 +38,7 @@ if args.mode == "raw":
   video.release()
 
 elif args.mode == "encoder":
-  movie_path = os.path.join(args.load_dir, "encoder_movie.mp4")
+  movie_path = os.path.join(args.load_dir, args.task + "_encoder_movie.mp4")
   video = cv2.VideoWriter(movie_path, fourcc, 2.0, (200, 200))
 
   file_num = sum(os.path.isfile(os.path.join(args.load_dir + "image_encoder/", name)) for name in os.listdir(args.load_dir + "image_encoder/"))
@@ -47,7 +48,7 @@ elif args.mode == "encoder":
   video.release()
 
 elif args.mode == "decoder":
-  movie_path = os.path.join(args.load_dir, "decoder_movie.mp4")
+  movie_path = os.path.join(args.load_dir, args.task + "_decoder_movie.mp4")
   video = cv2.VideoWriter(movie_path, fourcc, 2.0, (200, 200))
 
   file_num = sum(os.path.isfile(os.path.join(args.load_dir + "decoder_act/", name)) for name in os.listdir(args.load_dir + "decoder_act/"))

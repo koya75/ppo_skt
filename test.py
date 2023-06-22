@@ -27,6 +27,7 @@ def parser():
     parser.add_argument('--arg_file', type=str, default='args.json', help='json file name saved training settings')
     parser.add_argument('--num_episode', type=int, default=10, help='Number of episodes at the time of testing')
     parser.add_argument("--num-envs", type=int, default=1)
+    parser.add_argument("--abci", action="store_true", default=False)
     parser.add_argument(
         "--task",
         help="choose task",
@@ -67,7 +68,10 @@ def test():
     urdf.create_urdf()
     ####### initialize environment hyperparameters ######
     env_name = args.task
-    directory = "results/PPO/PPO_preTrained" + '/' + env_name + '/PPO_' + env_name + args.number + '/'
+    if args.abci:
+        directory = "results/ABCI/PPO/PPO_preTrained" + '/' + env_name + '/PPO_' + env_name + args.number + '/'
+    else:
+        directory = "results/PPO/PPO_preTrained" + '/' + env_name + '/PPO_' + env_name + args.number + '/'
     # load train args #####################################
     print(os.path.join(directory, args.arg_file))
     train_args = load_args(os.path.join(directory, args.arg_file))

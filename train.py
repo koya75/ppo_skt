@@ -412,7 +412,7 @@ def train():
                 print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {:.2f}".format(i_episode, time_step, eval_reward.round(decimals=2)))
                 log_f.write('{},{},{}\n'.format(i_episode, time_step, eval_reward.round(decimals=2)))
                 log_f.flush()
-                log_plot(log_f_name, directory)
+                log_plot(log_f_name, directory, env_name)
 
                 if eval_reward > best_reward:
                     best_reward = eval_reward
