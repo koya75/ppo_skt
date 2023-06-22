@@ -369,10 +369,10 @@ class FrankaGraspingEnv(VectorEnv):
     def reset(self, mask=None):
         if mask is not None:
             if np.any(~mask): # can not partial envs reset.
-                self.random_int = torch.randint(1, (self.num_envs,), device=self.device)
+                self.random_int = torch.randint(4, (self.num_envs,), device=self.device)
                 self._reset(torch.arange(self.num_envs, device=self.device))
         else:
-            self.random_int = torch.randint(1, (self.num_envs,), device=self.device)
+            self.random_int = torch.randint(4, (self.num_envs,), device=self.device)
             self._reset(torch.arange(self.num_envs, device=self.device))
         return self.obs_buf, self.random_int
 
@@ -538,10 +538,10 @@ def compute_franka_reward(
         elif randint[i]==1:
             gorl[i, 0] = 0.3
             gorl[i, 1] = 0.6
-        elif randint[i]==0:
+        elif randint[i]==2:
             gorl[i, 0] = -0.2
             gorl[i, 1] = 0.6
-        elif randint[i]==1:
+        elif randint[i]==3:
             gorl[i, 0] = 0.2
             gorl[i, 1] = 0.6
 
