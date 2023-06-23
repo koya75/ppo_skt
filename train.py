@@ -348,6 +348,7 @@ def train():
 
     time_step = 0
     i_episode = 0
+    eval_count = 0
 
     # training loop
     while time_step <= max_training_timesteps:
@@ -391,6 +392,7 @@ def train():
         #################### eval ####################
         if i_episode%eval_episode_interval==0 and i_episode > 0:
             dist.barrier()
+            eval_count += 1
             state, rand  = envs.reset()#
             eval_reward = 0
             sketch_querys = ppo_agent.select_query(rand)
@@ -409,7 +411,9 @@ def train():
             eval_reward = eval_reward/_num_gpus
             # save model weights
             if args.is_master:
-                print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {:.2f}".format(i_episode, time_step, eval_reward.round(decimals=2)))
+                print("--------------------------------------------------------------------------------------------")
+                print("Eval : {} \t\t Average Reward : {:.2f}".format(eval_count, eval_reward.round(decimals=2)))
+                print("--------------------------------------------------------------------------------------------")
                 log_f.write('{},{},{}\n'.format(i_episode, time_step, eval_reward.round(decimals=2)))
                 log_f.flush()
                 log_plot(log_f_name, directory, env_name)

@@ -308,8 +308,17 @@ class HSR(VecTask):
         #one = torch.ones_like(self.actions, device=self.device)
         for i, id in enumerate(self.drive_indices):
             self.actions_zeros[:, id] = self.actions[:,i]#one*0.6
-        self.targets = self.action_scale * self.actions_zeros + self.targets
-        self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(self.targets))
+
+        fit = 20
+        for i in range(fit):
+            self.gym.simulate(self.sim)
+            self.gym.fetch_results(self.sim, True)
+            self.gym.step_graphics(self.sim)
+            smooth = (1/fit) * (i+1)
+            self.targets = smooth * self.actions_zeros + self.dof_pos
+            self.gym.set_dof_position_target_tensor(self.sim, gymtorch.unwrap_tensor(self.targets))
+            if self.use_viewer:
+                self.gym.draw_viewer(self.viewer, self.sim, True)
 
     def post_physics_step(self):
         self.progress_buf += 1
@@ -343,27 +352,6 @@ class HSR(VecTask):
         self.gym.refresh_net_contact_force_tensor(self.sim)
         self.gym.refresh_dof_force_tensor(self.sim)
 
-        """self.obs_buf[:] = compute_anymal_observations(  # tensors
-                                                        self.root_states,
-                                                        self.commands,
-                                                        self.dof_pos,
-                                                        self.default_dof_pos,
-                                                        self.dof_vel,
-                                                        self.gravity_vec,
-                                                        self.actions,
-                                                        # scales
-                                                        self.lin_vel_scale,
-                                                        self.ang_vel_scale,
-                                                        self.dof_pos_scale,
-                                                        self.dof_vel_scale
-        )"""
-
-        # camera buf
-        """for i, _ in enumerate(self.envs):
-            marker_handle = self.gym.find_actor_handle(self.envs[i], "marker")
-            transform = gymapi.Transform()
-            transform.p = gymapi.Vec3(3.0, 0.0, 0.5)
-            self.gym.set_rigid_transform(self.envs[i], marker_handle, transform)"""
         self.gym.render_all_camera_sensors(self.sim)
         self.gym.start_access_image_tensors(self.sim)
 
@@ -383,15 +371,12 @@ class HSR(VecTask):
             self.obs_buf = self.obs_buf.permute(0, 3, 1, 2)
 
         self.gym.end_access_image_tensors(self.sim)
-        """for i, _ in enumerate(self.envs):
-            transform.p = gymapi.Vec3(3.0, 0.0, 0.5)
-            self.gym.set_rigid_transform(self.envs[i], marker_handle, transform)"""
 
     def reset_idx(self, env_ids):
         # Randomization can happen only at reset time, since it can reset actor positions on GPU
         if self.randomize:
             self.apply_randomizations(self.randomization_params)
-        self.random_int = torch.randint(3, (self.num_envs,), device=self.rl_device)
+        self.random_int = torch.randint(1, (self.num_envs,), device=self.rl_device)
 
         positions_offset = torch_rand_float(0.0, 0.1, (len(env_ids), self.num_dof), device=self.device)
         velocities = torch_rand_float(-0.1, 0.1, (len(env_ids), self.num_dof), device=self.device)
@@ -472,62 +457,5 @@ def compute_anymal_reward(
 
     # resets due to episode length
     reset = torch.where(episode_lengths >= max_episode_length, ones, zeros)
-    """# prepare quantities (TODO: return from obs ?)
-    base_quat = root_states[:, 3:7]
-    base_lin_vel = quat_rotate_inverse(base_quat, root_states[:, 7:10])
-    base_ang_vel = quat_rotate_inverse(base_quat, root_states[:, 10:13])
-
-    # velocity tracking reward
-    lin_vel_error = torch.sum(torch.square(commands[:, :2] - base_lin_vel[:, :2]), dim=1)
-    ang_vel_error = torch.square(commands[:, 2] - base_ang_vel[:, 2])
-    rew_lin_vel_xy = torch.exp(-lin_vel_error/0.25) * rew_scales["lin_vel_xy"]
-    rew_ang_vel_z = torch.exp(-ang_vel_error/0.25) * rew_scales["ang_vel_z"]
-
-    # torque penalty
-    rew_torque = torch.sum(torch.square(torques), dim=1) * rew_scales["torque"]
-
-    total_reward = rew_lin_vel_xy + rew_ang_vel_z + rew_torque
-    total_reward = torch.clip(total_reward, 0., None)
-    # reset agents
-    reset = torch.norm(contact_forces[:, base_index, :], dim=1) > 1.
-    reset = reset | torch.any(torch.norm(contact_forces[:, knee_indices, :], dim=2) > 1., dim=1)
-    reset = torch.norm(contact_forces[:, base_index, :], dim=1) < -1.
-    time_out = episode_lengths >= max_episode_length - 1  # no terminal reward for time-outs
-    reset = reset | time_out"""
 
     return total_reward.detach(), reset
-
-
-@torch.jit.script
-def compute_anymal_observations(root_states,
-                                commands,
-                                dof_pos,
-                                default_dof_pos,
-                                dof_vel,
-                                gravity_vec,
-                                actions,
-                                lin_vel_scale,
-                                ang_vel_scale,
-                                dof_pos_scale,
-                                dof_vel_scale
-                                ):
-
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, float, float, float, float) -> Tensor
-    base_quat = root_states[:, 3:7]
-    base_lin_vel = quat_rotate_inverse(base_quat, root_states[:, 7:10]) * lin_vel_scale
-    base_ang_vel = quat_rotate_inverse(base_quat, root_states[:, 10:13]) * ang_vel_scale
-    projected_gravity = quat_rotate(base_quat, gravity_vec)
-    dof_pos_scaled = (dof_pos - default_dof_pos) * dof_pos_scale
-
-    commands_scaled = commands*torch.tensor([lin_vel_scale, lin_vel_scale, ang_vel_scale], requires_grad=False, device=commands.device)
-
-    obs = torch.cat((base_lin_vel,
-                     base_ang_vel,
-                     projected_gravity,
-                     commands_scaled,
-                     dof_pos_scaled,
-                     dof_vel*dof_vel_scale,
-                     actions
-                     ), dim=-1)
-
-    return obs
